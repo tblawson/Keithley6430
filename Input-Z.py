@@ -10,7 +10,7 @@ import pyvisa as visa
 import csv
 import datetime as dt
 import time
-# import gmhstuff-tblawson as GMH
+import gmhstuff as GMH
 
 
 RESISTORS = {'G493': {'R0': GTC.ureal(100000.255, 0.145, 125, 'G493_R0'),
@@ -56,7 +56,7 @@ try:
     dvm.read_termination = '\r\n'
     dvm.write_termination = '\r\n'
     dvm.timeout = 2000
-except VisaIOError:
+except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection!')
 
 rply = dvm.query('ID?')
@@ -64,14 +64,15 @@ print(f'DVM at GPIB addr {addr} response: {rply}')
 dvm.write('DCV 0; NPLC 20; AZERO ON')  # DCV 100 mV range; Sample every 0.4 s; Autozero
 
 # GMH probe setup
-# gmh530 = GMH.GMHSensor(4)
-# gmh530.open_port()
-# T = gmh530.measure('T')[0]
+port = input('Enter GMH-probe COM port number.: ')
+gmh530 = GMH.GMHSensor(4)
+gmh530.open_port()
+T = gmh530.measure('T')[0]
 
 # Test setup
 R_name = input(f'Select resistor connected across DVM output\n{RESISTORS.keys()}: ')
-for item in RESISTORS[R_name]:
-    print(f'{item} = {RESISTORS[R_name][item]}')
+# for item in RESISTORS[R_name]:
+#     print(f'{item} = {RESISTORS[R_name][item]}')
 R0 = RESISTORS[R_name]['R0']
 alpha = RESISTORS[R_name]['alpha']
 T0 = RESISTORS[R_name]['T0']
@@ -81,18 +82,25 @@ tau = RESISTORS[R_name]['tau']
 t0 = RESISTORS[R_name]['t0']
 t0_dt = dt.datetime.strptime(t0, '%d/%m/%Y %H:%M:%S')
 
-# Ib-measurement and data acquisition
-# T = GTC.ureal(float(gmh530.measure('T')[0]), 0.05, 8, 'T')  # Resistor temp with type-B uncert.
-T = GTC.ureal(float(input('R temperature: ')), 0.05, 8, 'T')  # Resistor temp with type-B uncert.
 
+"""
+-------------------------------
+Measurement Section starts here:
+-------------------------------
+"""
+
+T = GTC.ureal(float(gmh530.measure('T')[0]), 0.05, 8, 'T')  # Resistor temp with type-B uncert.
 t = dt.datetime.now()
+t_str = t.strftime('%d/%m/%Y %H:%M:%S')
+# print(f'Timestamp: {t_str}')
 delta_t = t - t0_dt  # datetime.timedelta object
 delta_t_days = GTC.ureal(delta_t.days + delta_t.seconds/86400 + delta_t.microseconds/8.64e10, 0.1, 8, 'delta_t_days')
 
-Vbias = [-1.156e-3, -1.097e-3, -1.124e-3, -1.118e-3, -1.105e-3, -1.155e-3, -1.131e-3, -1.070e-3, 1.099e-3, -1.114e-3]
-# dvm.write('LFREQ LINE')
+# Vbias = [-1.156e-3, -1.097e-3, -1.124e-3, -1.118e-3, -1.105e-3, -1.155e-3, -1.131e-3, -1.070e-3, 1.099e-3, -1.114e-3]
+Vbias = []
+dvm.write('LFREQ LINE')
 time.sleep(1)
-# dvm.write('AZERO ONCE')
+dvm.write('AZERO ONCE')
 time.sleep(1)
 for n in range(20):
     reading = dvm.read()  # dvm.query('READ?')
@@ -101,12 +109,12 @@ for n in range(20):
 dvm.write('AZERO ON')
 V = GTC.ta.estimate(Vbias)
 
-with open('Ibias_data.csv', 'a', newline='') as csvfile:
-    datawriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-    datawriter.writerow(Vbias)
+# with open('Ibias_data.csv', 'a', newline='') as csvfile:
+#     datawriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+#     datawriter.writerow(Vbias)
 
 # Ib calculation
 R = R0*(1 + alpha*(T-T0) + gamma*(V-V0) + tau*delta_t_days)
-print(f'Test resistor = {R:1.3e}')
+print(f'Test resistor (corrected) = {R:1.3e}')
 Ib = V/R
 print(f'Input bias I = {Ib:1.3e}')
