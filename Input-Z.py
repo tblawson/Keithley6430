@@ -145,6 +145,28 @@ Rin = m/c
 RESULTS.update({'Ib': Ib, 'Rin': Rin})
 print(f'Final calculated values:\nIb = {Ib}\nRin = {Rin}')
 
-json_str = json.dumps(RESULTS, indent=4)
-with open('results.json', 'w') as json_file:
-    json.dump(json_str, file)
+
+# Store data
+class UrealEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, GTC.lib.UncertainReal):
+            return {'__ureal__': True, 'val': obj.x, 'unc': obj.u, 'dof': obj.df}
+        return super().default(obj)
+
+def as_ureal(dct):
+    if '__ureal__' in dct:
+        return GTC.ureal(dct['val'], dct['unc'], dct['dof'])
+    else:
+        return dct
+
+
+print('Storing data...')
+with open('Ib_Rin.json', 'w') as json_file:
+    json.dump(RESULTS, json_file, cls=UrealEncoder)
+# json_str = json.dumps(RESULTS, indent=4)
+
+# Retrieve data and pretty-print
+print('Retrieved data:')
+with open('Ib_Rin.json', 'r') as json_ip:
+    json_str = json.load(json_ip, object_hook=as_ureal)
+print(json_str)
