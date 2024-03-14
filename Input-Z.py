@@ -12,7 +12,7 @@ import datetime as dt
 import time
 import gmhstuff as gmh
 
-N_READINGS = 5
+N_READINGS = 20
 RESISTORS = {'G493': {'R0': GTC.ureal(100000.255, 0.145, 125, 'G493_R0'),
                       'alpha': GTC.ureal(-9.6e-7, 6.1e-7, 74, 'G493_alpha'),
                       'T0': GTC.ureal(20.476, 0.035, 75, 'G494_T0'),
@@ -42,7 +42,13 @@ RESISTORS = {'G493': {'R0': GTC.ureal(100000.255, 0.145, 125, 'G493_R0'),
                        'tau': GTC.ureal(7.2e-10, 7.1e-10, 56, 'C9620_tau'),
                        't0': '07/09/2020 08:50:44'},
              'G003': {},  #
-             'C1G': {},
+             'C1G': {'R0': GTC.ureal(1004237779, 12763, 36, 'C1G_R0'),
+                       'alpha': GTC.ureal(-3.0e-5, 5.9e-6, 28, 'C1G_alpha'),
+                       'T0': GTC.ureal(20.720, 0.025, 29, 'C1G_T0'),
+                       'gamma': GTC.ureal(-2.2e-8, 1.7e-8, 28, 'C1G_gamma'),
+                       'V0': GTC.ureal(55.0, 8.4, 29, 'C1G_V0'),
+                       'tau': GTC.ureal(4.7e-8, 2.2e-7, 28, 'C1G_tau'),
+                       't0': '18/07/2020 09:27:11'},
              'C10G': {},
              'C100G': {},
              'C1T': {},
@@ -121,13 +127,15 @@ while True:
     print(f'Input bias I = {Ib_approx:1.3e}')
 
     # Compile results dict
-    Ib_result = {R_name: {'T': T, 'V': V, 't': t,
+    Ib_result = {R_name: {'T': T, 'V': V, 't': t_str,
                           'R': R,  # 'R': {'val': R.x, 'unc': R.u, 'df': R.df},
                           'Ib_approx': Ib_approx  # 'Ib': {'val': Ib_approx.x, 'unc': Ib_approx.u, 'df': Ib_approx.df}
                           }
                 }
     RESULTS.update(Ib_result)
 # End of measurement loop for this resistor
+
+print(f'\n{RESULTS}\n')
 
 # Do full calculation
 inv_R = []
@@ -139,7 +147,12 @@ inv_R_vals = [r.x for r in inv_R]
 inv_R_uncs = [r.u for r in inv_R]
 inv_V_vals = [v.x for v in inv_V]
 inv_V_uncs = [v.u for v in inv_V]
-c, m = GTC.ta.line_fit_wtls(inv_R_vals, inv_V_vals, inv_R_uncs, inv_V_uncs).a_b
+print(f'inv_R_vals: {inv_R_vals}\n'
+      f'inv_R_uncs: {inv_R_uncs}\n'
+      f'inv_V_vals: {inv_V_vals}\n'
+      f'inv_V_uncs: {inv_V_uncs}')
+# c, m = GTC.ta.line_fit_wtls(inv_R_vals, inv_V_vals, inv_R_uncs, inv_V_uncs).a_b
+c, m = GTC.ta.line_fit_wls(inv_R_vals, inv_V_vals, inv_V_uncs).a_b
 Ib = 1/m
 Rin = m/c
 RESULTS.update({'Ib': Ib, 'Rin': Rin})
@@ -153,6 +166,7 @@ class UrealEncoder(json.JSONEncoder):
             return {'__ureal__': True, 'val': obj.x, 'unc': obj.u, 'dof': obj.df}
         return super().default(obj)
 
+
 def as_ureal(dct):
     if '__ureal__' in dct:
         return GTC.ureal(dct['val'], dct['unc'], dct['dof'])
@@ -162,11 +176,11 @@ def as_ureal(dct):
 
 print('Storing data...')
 with open('Ib_Rin.json', 'w') as json_file:
-    json.dump(RESULTS, json_file, cls=UrealEncoder)
+    json.dump(RESULTS, json_file, indent=4, cls=UrealEncoder)
 # json_str = json.dumps(RESULTS, indent=4)
 
 # Retrieve data and pretty-print
-print('Retrieved data:')
+print('\nRetrieved data:')
 with open('Ib_Rin.json', 'r') as json_ip:
     json_str = json.load(json_ip, object_hook=as_ureal)
 print(json_str)
