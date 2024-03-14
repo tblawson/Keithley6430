@@ -12,7 +12,7 @@ import datetime as dt
 import time
 import gmhstuff as gmh
 
-
+N_READINGS = 5
 RESISTORS = {'G493': {'R0': GTC.ureal(100000.255, 0.145, 125, 'G493_R0'),
                       'alpha': GTC.ureal(-9.6e-7, 6.1e-7, 74, 'G493_alpha'),
                       'T0': GTC.ureal(20.476, 0.035, 75, 'G494_T0'),
@@ -103,7 +103,7 @@ while True:
     time.sleep(1)
     dvm.write('AZERO ONCE')
     time.sleep(1)
-    for n in range(20):
+    for n in range(N_READINGS):
         reading = dvm.read()  # dvm.query('READ?')
         print(reading)
         Vbias.append(float(reading))
