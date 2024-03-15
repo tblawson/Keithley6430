@@ -116,10 +116,6 @@ while True:
     dvm.write('AZERO ON')
     V = GTC.ta.estimate(Vbias)
 
-# with open('Ibias_data.csv', 'a', newline='') as csvfile:
-#     datawriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
-#     datawriter.writerow(Vbias)
-
     # Ib calculation
     R = R0*(1 + alpha*(T-T0) + gamma*(V-V0) + tau*delta_t_days)
     print(f'\nTest resistor (corrected) = {R:1.3e}')
