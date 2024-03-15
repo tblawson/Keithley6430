@@ -153,6 +153,7 @@ print(f'inv_R_vals: {inv_R_vals}\n'
       f'inv_V_uncs: {inv_V_uncs}')
 # c, m = GTC.ta.line_fit_wtls(inv_R_vals, inv_V_vals, inv_R_uncs, inv_V_uncs).a_b
 c, m = GTC.ta.line_fit_wls(inv_R_vals, inv_V_vals, inv_V_uncs).a_b
+
 Ib = 1/m
 Rin = m/c
 RESULTS.update({'Ib': Ib, 'Rin': Rin})
