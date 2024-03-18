@@ -1,6 +1,19 @@
 # -*- coding: utf-8 -*
 """
-General-purpose input-Z measurement routine for 3458A DVMs.
+General-purpose input-Z measurement routine for 3458A DVMs (Step 1).
+
+This script is the first stage in a 2-step process to obtain the input bias current
+of a meter. It also provides an (unreliable) estimate of the input impedance.
+
+The value of Ib can be used as input to R_input.py which provides a more reliable
+estimate of Rin
+
+Workflow progresses by connecting a known resistor across the dvm input
+and measuring the voltage drop. Ib= V/R is then calculated from the resistor value and
+the mean of the voltage readings.
+
+If enough sets of measurements (each with a different R) are taken, values of Ib and Rin
+are calculated from a fit to the accumulated data.
 
 RESISTORS data: All uncertainties are expressed in the quantity units.
 u(t0) is in [days]; tau is in [days^-1].
@@ -43,12 +56,12 @@ RESISTORS = {'G493': {'R0': GTC.ureal(100000.255, 0.145, 125, 'G493_R0'),
                        't0': '07/09/2020 08:50:44'},
              'G003': {},  #
              'C1G': {'R0': GTC.ureal(1004237779, 12763, 36, 'C1G_R0'),
-                       'alpha': GTC.ureal(-3.0e-5, 5.9e-6, 28, 'C1G_alpha'),
-                       'T0': GTC.ureal(20.720, 0.025, 29, 'C1G_T0'),
-                       'gamma': GTC.ureal(-2.2e-8, 1.7e-8, 28, 'C1G_gamma'),
-                       'V0': GTC.ureal(55.0, 8.4, 29, 'C1G_V0'),
-                       'tau': GTC.ureal(4.7e-8, 2.2e-7, 28, 'C1G_tau'),
-                       't0': '18/07/2020 09:27:11'},
+                     'alpha': GTC.ureal(-3.0e-5, 5.9e-6, 28, 'C1G_alpha'),
+                     'T0': GTC.ureal(20.720, 0.025, 29, 'C1G_T0'),
+                     'gamma': GTC.ureal(-2.2e-8, 1.7e-8, 28, 'C1G_gamma'),
+                     'V0': GTC.ureal(55.0, 8.4, 29, 'C1G_V0'),
+                     'tau': GTC.ureal(4.7e-8, 2.2e-7, 28, 'C1G_tau'),
+                     't0': '18/07/2020 09:27:11'},
              'C10G': {},
              'C100G': {},
              'C1T': {},
@@ -133,27 +146,28 @@ while True:
 
 print(f'\n{RESULTS}\n')
 
-# Do full calculation
-inv_R = []
-inv_V = []
-for nom_R in RESULTS:
-    inv_R.append(1/(RESULTS[nom_R]['R']))  # inv_R.append(1/nom_R['R'])
-    inv_V.append(1/(RESULTS[nom_R]['V']))
-inv_R_vals = [r.x for r in inv_R]
-inv_R_uncs = [r.u for r in inv_R]
-inv_V_vals = [v.x for v in inv_V]
-inv_V_uncs = [v.u for v in inv_V]
-print(f'inv_R_vals: {inv_R_vals}\n'
-      f'inv_R_uncs: {inv_R_uncs}\n'
-      f'inv_V_vals: {inv_V_vals}\n'
-      f'inv_V_uncs: {inv_V_uncs}')
-# c, m = GTC.ta.line_fit_wtls(inv_R_vals, inv_V_vals, inv_R_uncs, inv_V_uncs).a_b
-c, m = GTC.ta.line_fit_wls(inv_R_vals, inv_V_vals, inv_V_uncs).a_b
+if len(RESULTS) > 3:
+    # Do full calculation
+    inv_R = []
+    inv_V = []
+    for nom_R in RESULTS:
+        inv_R.append(1/(RESULTS[nom_R]['R']))  # inv_R.append(1/nom_R['R'])
+        inv_V.append(1/(RESULTS[nom_R]['V']))
+    inv_R_vals = [r.x for r in inv_R]
+    inv_R_uncs = [r.u for r in inv_R]
+    inv_V_vals = [v.x for v in inv_V]
+    inv_V_uncs = [v.u for v in inv_V]
+    print(f'inv_R_vals: {inv_R_vals}\n'
+          f'inv_R_uncs: {inv_R_uncs}\n'
+          f'inv_V_vals: {inv_V_vals}\n'
+          f'inv_V_uncs: {inv_V_uncs}')
+    # c, m = GTC.ta.line_fit_wtls(inv_R_vals, inv_V_vals, inv_R_uncs, inv_V_uncs).a_b
+    c, m = GTC.ta.line_fit_wls(inv_R_vals, inv_V_vals, inv_V_uncs).a_b
 
-Ib = 1/m
-Rin = m/c
-RESULTS.update({'Ib': Ib, 'Rin': Rin})
-print(f'Final calculated values:\nIb = {Ib}\nRin = {Rin}')
+    Ib = 1/m
+    Rin = m/c
+    RESULTS.update({'Ib': Ib, 'Rin': Rin})
+    print(f'Final calculated values:\nIb = {Ib}\nRin = {Rin}')
 
 
 # Store data
@@ -174,7 +188,6 @@ def as_ureal(dct):
 print('Storing data...')
 with open('Ib_Rin.json', 'w') as json_file:
     json.dump(RESULTS, json_file, indent=4, cls=UrealEncoder)
-# json_str = json.dumps(RESULTS, indent=4)
 
 # Retrieve data and pretty-print
 print('\nRetrieved data:')

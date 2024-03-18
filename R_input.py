@@ -1,0 +1,158 @@
+# -*- coding: utf-8 -*
+"""
+General-purpose input-Z measurement routine for 3458A DVMs (Step 2).
+
+This script is the second stage in a 2-step process to obtain the input impedance
+of a meter.
+
+The value of Ib obtained from Ib_Rin.py can be used as input.
+
+Workflow progresses by connecting a known resistor in series with a source across the dvm input
+and measuring the voltage both with and without the resistor shorted.
+
+Rin = R*V/(Vs - V + Ib*R) is then calculated from a table of known resistor values, Ib and
+the mean of the voltage readings in each circuit configuration.
+
+RESISTORS data: All uncertainties are expressed in the quantity units.
+u(t0) is in [days]; tau is in [days^-1].
+"""
+
+import GTC
+import pyvisa as visa
+import json
+import datetime as dt
+import time
+import gmhstuff as gmh
+
+N_READINGS = 20
+
+"""
+---------------------------
+JSON ureal stuff
+---------------------------
+"""
+
+
+class UrealEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, GTC.lib.UncertainReal):
+            return {'__ureal__': True, 'val': obj.x, 'unc': obj.u, 'dof': obj.df}
+        return super().default(obj)
+
+
+def as_ureal(dct):
+    if '__ureal__' in dct:
+        return GTC.ureal(dct['val'], dct['unc'], dct['dof'])
+    else:
+        return dct
+
+
+def measure(vset):
+    """
+    Measurement loop function.
+    vset: str (Nominal source voltage setting)
+    rtn: ureal (mean measured voltage)
+    """
+    # Prepare DVM and SRC for measurement
+    dvm.write(f'DCV {vset}')
+    time.sleep(0.1)
+
+    src.write(f'OUT {vset}V,0Hz')
+    src.write('OPER')
+    time.sleep(5)
+
+    dvm.write(f'LFREQ LINE')
+    time.sleep(1)
+    dvm.write('AZERO ONCE')
+    time.sleep(1)
+
+    # Measurement loop - V
+    v_readings = []
+    for n in range(N_READINGS):
+        reading = dvm.read()  # dvm.query('READ?')
+        print(reading)
+        v_readings.append(float(reading))
+    v_av = GTC.ta.estimate(v_readings)
+
+    # Set DVM and SRC to 'safe mode'
+    dvm.write('AZERO ON')
+    src.write('OUT 0V,0Hz')
+    src.write('STBY')
+    return v_av
+
+
+# import Resistor info to RESISTORS dict
+with open('RESISTORS.json', 'r') as json_file:
+    RESISTORS = json.load(json_file, object_hook=as_ureal)
+
+# GPIB connection
+RM = visa.ResourceManager()
+print('\navailable visa resources:'
+      f'\n{RM.list_resources()}')
+
+# dvm initialisation
+addr_dvm = input('\nEnter dvm GPIB address: ')  # 25
+try:
+    dvm = RM.open_resource(f'GPIB1::{addr_dvm}::INSTR')
+    dvm.read_termination = '\r\n'
+    dvm.write_termination = '\r\n'
+    dvm.timeout = 2000
+except visa.VisaIOError:
+    print('ERROR - Failed to setup visa connection to dvm!')  # 4
+dvm.write('DCV 100; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
+
+# Source initialisation
+addr_src = input('\nEnter source GPIB address: ')
+try:
+    src = RM.open_resource(f'GPIB1::{addr_src}::INSTR')
+except visa.VisaIOError:
+    print('ERROR - Failed to setup visa connection to src!')
+
+# GMH probe setup
+port = input('\nEnter GMH-probe COM-port number: ')  # 4
+gmh530 = gmh.GMHSensor(port)
+print(f'gmh530 test-read: {gmh530.measure("T")}')
+
+
+"""
+-------------------------------
+Measurement Section starts here:
+-------------------------------
+"""
+while True:  # 1 loop for each [Rs, Vset] combination
+    while True:  # Check test parameters:
+        R_name = input(f'\nSelect shunt resistor\n{RESISTORS.keys()}: ')
+        R0 = RESISTORS[R_name]['R0']
+        alpha = RESISTORS[R_name]['alpha']
+        T0 = RESISTORS[R_name]['T0']
+        gamma = RESISTORS[R_name]['gamma']
+        V0 = RESISTORS[R_name]['V0']
+        tau = RESISTORS[R_name]['tau']
+        t0 = RESISTORS[R_name]['t0']
+        t0_dt = dt.datetime.strptime(t0, '%d/%m/%Y %H:%M:%S')
+
+        Vset = input('\nSupply voltage: ')
+        Rs_name = input(f'Shunt resistor name\n{RESISTORS.keys()}: ')
+        Rs = RESISTORS[Rs_name]['R0']  # A ureal
+        nom_current = float(Vset) / Rs
+        resp = input(f'Nominal current = {nom_current.x:.1e} A. Continue to test (y/n)?')
+        if resp == 'n':
+            continue  # Skip to start of loop
+
+    # Grab a temperature reading
+    T = GTC.ureal(float(gmh530.measure('T')[0]), 0.05, 8, 'T')  # Resistor temp with type-B uncert.
+
+    # Grab a timestamp
+    t = dt.datetime.now()
+    t_str = t.strftime('%d/%m/%Y %H:%M:%S')
+    print(f'Timestamp: {t_str}')
+    delta_t = t - t0_dt  # datetime.timedelta object
+    delta_t_days = GTC.ureal(delta_t.days + delta_t.seconds / 86400 + delta_t.microseconds / 8.64e10, 0.1, 8,
+                             'delta_t_days')
+
+    V_av = measure(Vset)
+    dummy = input(f'Bypass Rs. Press any key when completed.')
+    Vs_av = measure(Vset)
+
+    result = {'t': t, 'Rs': R0, 'Vs': Vs_av, 'V': V_av}
+    # APPEND result on json file
