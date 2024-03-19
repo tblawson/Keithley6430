@@ -188,7 +188,7 @@ while True:  # 1 loop for each [Rs, Vset] combination
     Rin = R*V_av/(Vs_av - V_av + Ib*R)
     Rin_approx = R * V_av / (Vs_av - V_av + Ib_approx*R)
     print(f'\nRin = {Rin}\nRin_approx = {Rin_approx}')
-    result = {'t': t_str, 'Rs': R, 'Vs': Vs_av, 'V': V_av, 'Rin': Rin, 'Rin_approx': Rin_approx}
+    result = {f'{R_name}_V{Vset}': {'t': t_str, 'Rs': R, 'Vs': Vs_av, 'V': V_av, 'Rin': Rin, 'Rin_approx': Rin_approx}}
     results.update(result)
     resp = input('Continue with another Rs / test-V (y/n)? ')
     if resp == 'n':
