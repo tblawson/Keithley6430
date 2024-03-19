@@ -72,9 +72,15 @@ def measure(vset):
     v_readings = []
     for n in range(N_READINGS):
         reading = dvm.read()  # dvm.query('READ?')
+        if abs(float(reading)) > 10*vset:
+            print(f'{reading} too high! - skipped')
+            continue
         print(reading)
         v_readings.append(float(reading))
-    v_av = GTC.ta.estimate(v_readings)
+    if len(v_readings) > 1:
+        v_av = GTC.ta.estimate(v_readings)
+    else:
+        v_av = 0  # No valid readings!
 
     # Set DVM and SRC to 'safe mode'
     dvm.write('AZERO ON')
@@ -203,7 +209,3 @@ RM.close()
 
 with open(f'{results_filename}', 'w') as Rin_results_fp:
     json.dump(results, Rin_results_fp, indent=4, cls=UrealEncoder)
-
-# with open(f'{results_filename}', 'r') as json_ip:
-#     results_dict = json.load(json_ip, object_hook=as_ureal)
-
