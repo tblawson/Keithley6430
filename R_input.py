@@ -152,8 +152,8 @@ while True:  # 1 loop for each [Rs, Vset] combination
         Vset = input('\nSupply voltage: ')
         nom_current = float(Vset)/R0.x
         resp = input(f'Nominal current = {nom_current:.1e} A. Continue with test (y/n)?')
-        if resp == 'n':
-            continue  # Skip to start of loop
+        if resp == 'y':
+            break  # Parameters locked-in
 
     # Grab a temperature reading
     T = GTC.ureal(float(gmh530.measure('T')[0]), 0.05, 8, 'T')  # Resistor temp with type-B uncert.

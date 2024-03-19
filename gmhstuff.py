@@ -57,7 +57,7 @@ class GMHSensor:
         * not associated with an open COM port.
         """
         self.demo = demo
-        self.port = int(port)
+        self.port = int(port)  # Has to be type <int>!
         self.com_open = False
         self.error_msg = '-'
         self.status_msg = '-'
