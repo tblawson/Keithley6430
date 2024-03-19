@@ -165,14 +165,14 @@ while True:  # 1 loop for each [Rs, Vset] combination
     # Grab a timestamp
     t = dt.datetime.now()
     t_str = t.strftime('%d/%m/%Y %H:%M:%S')
-    print(f'Timestamp: {t_str}')
+    print(f'Timestamp: {t_str}\n')
     delta_t = t - t0_dt  # datetime.timedelta object
     delta_t_days = GTC.ureal(delta_t.days + delta_t.seconds / 86400 + delta_t.microseconds / 8.64e10, 0.1, 8,
                              'delta_t_days')
 
     # The actual measurements happen here:
     V_av = measure(Vset)  # Measure V with Rs connected (ureal)
-    dummy = input(f'Bypass Rs, then press any key when completed.')
+    dummy = input(f'Bypass Rs, then press ENTER when completed.')
     Vs_av = measure(Vset)  # Measure Vs with Rs shorted (ureal)
 
     # NOTE: Rs voltage-drop is (Vs_av - V_av)!
