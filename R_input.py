@@ -139,7 +139,8 @@ print(f'gmh530 test-read: {gmh530.measure("T")}')
 Measurement Section starts here:
 -------------------------------
 """
-results = {}
+with open(f'{results_filename}', 'r') as Rin_fp:  # Open existing results file so we can add to it.
+    results = json.load(Rin_fp, object_hook=as_ureal)
 while True:  # 1 loop for each [Rs, Vset] combination
     while True:  # Check test parameters:
         R_name = input(f'\nSelect shunt resistor - ENSURE IT IS NOT SHORTED!\n{RESISTORS.keys()}: ')
@@ -151,7 +152,6 @@ while True:  # 1 loop for each [Rs, Vset] combination
         tau = RESISTORS[R_name]['tau']
         t0 = RESISTORS[R_name]['t0']
         t0_dt = dt.datetime.strptime(t0, '%d/%m/%Y %H:%M:%S')
-
 
         Vset = input('\nSupply voltage: ')
         nom_current = float(Vset)/R0.x
