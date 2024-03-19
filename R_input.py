@@ -27,9 +27,9 @@ import gmhstuff as gmh
 N_READINGS = 20
 
 """
----------------------------
-JSON ureal stuff
----------------------------
+------------------------------
+JSON <-> ureal class, function
+------------------------------
 """
 
 
@@ -45,6 +45,7 @@ def as_ureal(dct):
         return GTC.ureal(dct['val'], dct['unc'], dct['dof'])
     else:
         return dct
+# ---------------------------------
 
 
 def measure(vset):
@@ -81,10 +82,25 @@ def measure(vset):
     return v_av
 
 
+"""
+---------------------------------
+I/O Section & data storage
+---------------------------------
+"""
 # import Resistor info to RESISTORS dict
-with open('RESISTORS.json', 'r') as json_file:
-    RESISTORS = json.load(json_file, object_hook=as_ureal)
+with open('RESISTORS.json', 'r') as Resistors_fp:
+    RESISTORS = json.load(Resistors_fp, object_hook=as_ureal)
 
+# Create data file
+sn = input('\nEnter last 3 digits of 3458A serial number: ')
+results_filename = f'HP3458A-{sn}_Rin.json'
+ib_Rin_filename = f'HP3458A-{sn}_Ib_Rin.json'
+
+"""
+---------------------------------
+Instruments Section
+---------------------------------
+"""
 # GPIB connection
 RM = visa.ResourceManager()
 print('\navailable visa resources:'
@@ -119,9 +135,10 @@ print(f'gmh530 test-read: {gmh530.measure("T")}')
 Measurement Section starts here:
 -------------------------------
 """
+results = {}
 while True:  # 1 loop for each [Rs, Vset] combination
     while True:  # Check test parameters:
-        R_name = input(f'\nSelect shunt resistor\n{RESISTORS.keys()}: ')
+        R_name = input(f'\nSelect shunt resistor - ENSURE IT IS NOT SHORTED!\n{RESISTORS.keys()}: ')
         R0 = RESISTORS[R_name]['R0']
         alpha = RESISTORS[R_name]['alpha']
         T0 = RESISTORS[R_name]['T0']
@@ -131,11 +148,10 @@ while True:  # 1 loop for each [Rs, Vset] combination
         t0 = RESISTORS[R_name]['t0']
         t0_dt = dt.datetime.strptime(t0, '%d/%m/%Y %H:%M:%S')
 
+
         Vset = input('\nSupply voltage: ')
-        Rs_name = input(f'Shunt resistor name\n{RESISTORS.keys()}: ')
-        Rs = RESISTORS[Rs_name]['R0']  # A ureal
-        nom_current = float(Vset) / Rs
-        resp = input(f'Nominal current = {nom_current.x:.1e} A. Continue to test (y/n)?')
+        nom_current = float(Vset)/R0.x
+        resp = input(f'Nominal current = {nom_current:.1e} A. Continue with test (y/n)?')
         if resp == 'n':
             continue  # Skip to start of loop
 
@@ -150,9 +166,36 @@ while True:  # 1 loop for each [Rs, Vset] combination
     delta_t_days = GTC.ureal(delta_t.days + delta_t.seconds / 86400 + delta_t.microseconds / 8.64e10, 0.1, 8,
                              'delta_t_days')
 
-    V_av = measure(Vset)
-    dummy = input(f'Bypass Rs. Press any key when completed.')
-    Vs_av = measure(Vset)
+    # The actual measurements happen here:
+    V_av = measure(Vset)  # Measure V with Rs connected (ureal)
+    dummy = input(f'Bypass Rs, then press any key when completed.')
+    Vs_av = measure(Vset)  # Measure Vs with Rs shorted (ureal)
 
-    result = {'t': t, 'Rs': R0, 'Vs': Vs_av, 'V': V_av}
-    # APPEND result on json file
+    # NOTE: Rs voltage-drop is (Vs_av - V_av)!
+    R = R0 * (1 + alpha * (T - T0) + gamma * ((Vs_av - V_av) - V0) + tau * delta_t_days)
+
+    # import Ib info
+    with open(f'{ib_Rin_filename}', 'r') as ib_Rin_fp:
+        ib_Rin_dict = json.load(ib_Rin_fp, object_hook=as_ureal)
+    Ib_approx = ib_Rin_dict[R_name]['Ib_approx']  # Rs-specific Ib
+    Ib = ib_Rin_dict['Ib']  # Ib from fit of all Rs's
+
+    # Calculate Rin
+    Rin = R*V_av/(Vs_av - V_av + Ib*R)
+    Rin_approx = R * V_av / (Vs_av - V_av + Ib_approx*R)
+    result = {'t': t, 'Rs': R, 'Vs': Vs_av, 'V': V_av, 'Rin': Rin, 'Rin_approx': Rin_approx}
+    results.update(result)
+    resp = input('Continue with another Rs / test-V (y/n)? ')
+    if resp == 'n':
+        break
+
+dvm.close()
+src.close()
+RM.close()
+
+with open(f'{results_filename}', 'w') as Rin_results_fp:
+    json.dump(results, Rin_results_fp, indent=4, cls=UrealEncoder)
+
+# with open(f'{results_filename}', 'r') as json_ip:
+#     results_dict = json.load(json_ip, object_hook=as_ureal)
+

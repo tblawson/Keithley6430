@@ -68,6 +68,8 @@ RESISTORS = {'G493': {'R0': GTC.ureal(100000.255, 0.145, 125, 'G493_R0'),
              }
 RESULTS = {}
 
+sn = input('\nEnter last 3 digits of 3458A serial number: ')
+
 # GPIB connection and dvm initialisation
 RM = visa.ResourceManager()
 print('\navailable visa resources:'
@@ -127,16 +129,16 @@ while True:
         print(reading)
         Vbias.append(float(reading))
     dvm.write('AZERO ON')
-    V = GTC.ta.estimate(Vbias)
+    Vav = GTC.ta.estimate(Vbias)
 
     # Ib calculation
-    R = R0*(1 + alpha*(T-T0) + gamma*(V-V0) + tau*delta_t_days)
+    R = R0*(1 + alpha * (T-T0) + gamma * (Vav - V0) + tau * delta_t_days)
     print(f'\nTest resistor (corrected) = {R:1.3e}')
-    Ib_approx = V / R
+    Ib_approx = Vav / R
     print(f'Input bias I = {Ib_approx:1.3e}')
 
     # Compile results dict
-    Ib_result = {R_name: {'T': T, 'V': V, 't': t_str,
+    Ib_result = {R_name: {'T': T, 'V': Vav, 't': t_str,
                           'R': R,  # 'R': {'val': R.x, 'unc': R.u, 'df': R.df},
                           'Ib_approx': Ib_approx  # 'Ib': {'val': Ib_approx.x, 'unc': Ib_approx.u, 'df': Ib_approx.df}
                           }
@@ -185,12 +187,14 @@ def as_ureal(dct):
         return dct
 
 
-print('Storing data...')
-with open('Ib_Rin.json', 'w') as json_file:
+# Store data
+filename = f'HP3458A-{sn}_Ib_Rin'
+print(f'Storing data in "{filename}.json"...')
+with open(f'{filename}', 'w') as json_file:
     json.dump(RESULTS, json_file, indent=4, cls=UrealEncoder)
 
 # Retrieve data and pretty-print
 print('\nRetrieved data:')
-with open('Ib_Rin.json', 'r') as json_ip:
+with open(f'{filename}', 'r') as json_ip:
     json_str = json.load(json_ip, object_hook=as_ureal)
 print(json_str)
