@@ -17,6 +17,7 @@ RESISTORS data: All uncertainties are expressed in the quantity units.
 u(t0) is in [days]; tau is in [days^-1].
 """
 
+import os
 import GTC
 import pyvisa as visa
 import json
@@ -91,10 +92,13 @@ I/O Section & data storage
 with open('RESISTORS.json', 'r') as Resistors_fp:
     RESISTORS = json.load(Resistors_fp, object_hook=as_ureal)
 
-# Create data file
+# Data files
+folder = r'G:\My Drive\TechProcDev\Keithley6430-src-meter_Light'
 sn = input('\nEnter last 3 digits of 3458A serial number: ')
-results_filename = f'HP3458A-{sn}_Rin.json'
-ib_Rin_filename = f'HP3458A-{sn}_Ib_Rin.json'
+# results_filename = f'HP3458A-{sn}_Rin.json'
+results_filename = os.path.join(folder, f'HP3458A-{sn}_Rin.json')
+# ib_Rin_filename = f'HP3458A-{sn}_Ib_Rin.json'
+ib_Rin_filename = os.path.join(folder, f'HP3458A-{sn}_Ib_Rin.json')
 
 """
 ---------------------------------
@@ -183,7 +187,8 @@ while True:  # 1 loop for each [Rs, Vset] combination
     # Calculate Rin
     Rin = R*V_av/(Vs_av - V_av + Ib*R)
     Rin_approx = R * V_av / (Vs_av - V_av + Ib_approx*R)
-    result = {'t': t, 'Rs': R, 'Vs': Vs_av, 'V': V_av, 'Rin': Rin, 'Rin_approx': Rin_approx}
+    print(f'\nRin = {Rin}\nRin_approx = {Rin_approx}')
+    result = {'t': t_str, 'Rs': R, 'Vs': Vs_av, 'V': V_av, 'Rin': Rin, 'Rin_approx': Rin_approx}
     results.update(result)
     resp = input('Continue with another Rs / test-V (y/n)? ')
     if resp == 'n':
