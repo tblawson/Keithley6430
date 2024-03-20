@@ -89,6 +89,17 @@ def measure(vset):
     return v_av
 
 
+def dud_ureal(u_lst):
+    """
+    Check for dof=NaN in a list of GTC.ureals.
+    Return True if dof=NaN is present, False otherwise.
+    :param u_lst: list of ureals
+    :return: boolean
+    """
+    for u in u_lst:
+        if u.df == float('NaN'):
+            return True
+    return False
 """
 ---------------------------------
 I/O Section & data storage
@@ -196,7 +207,13 @@ while True:  # 1 loop for each [Rs, Vset] combination
     Rin_approx = R * V_av / (Vs_av - V_av + Ib_approx*R)
     print(f'\nRin = {Rin}\nRin_approx = {Rin_approx}')
     result = {f'{R_name}_V{Vset}': {'t': t_str, 'Rs': R, 'Vs': Vs_av, 'V': V_av, 'Rin': Rin, 'Rin_approx': Rin_approx}}
-    results.update(result)
+    if dud_ureal([Rin, Rin_approx]):
+        print('This test is dud and will be skipped!')
+    else:
+        results.update(result)
+        print('Saving data...')
+        with open(f'{results_filename}', 'w') as Rin_results_fp:
+            json.dump(results, Rin_results_fp, indent=4, cls=UrealEncoder)
     resp = input('Continue with another Rs / test-V (y/n)? ')
     if resp == 'n':
         break
@@ -205,6 +222,6 @@ dvm.close()
 src.close()
 RM.close()
 
-print('Saving data...')
-with open(f'{results_filename}', 'w') as Rin_results_fp:
-    json.dump(results, Rin_results_fp, indent=4, cls=UrealEncoder)
+# print('Saving data...')
+# with open(f'{results_filename}', 'w') as Rin_results_fp:
+#     json.dump(results, Rin_results_fp, indent=4, cls=UrealEncoder)
