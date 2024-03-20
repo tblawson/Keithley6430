@@ -72,7 +72,7 @@ def measure(vset):
     v_readings = []
     for n in range(N_READINGS):
         reading = dvm.read()  # dvm.query('READ?')
-        if abs(float(reading)) > 10*vset:
+        if abs(float(reading)) > 10*float(vset):
             print(f'{reading} too high! - skipped')
             continue
         print(reading)
@@ -101,9 +101,7 @@ with open('RESISTORS.json', 'r') as Resistors_fp:
 # Data files
 folder = r'G:\My Drive\TechProcDev\Keithley6430-src-meter_Light'
 sn = input('\nEnter last 3 digits of 3458A serial number: ')
-# results_filename = f'HP3458A-{sn}_Rin.json'
 results_filename = os.path.join(folder, f'HP3458A-{sn}_Rin.json')
-# ib_Rin_filename = f'HP3458A-{sn}_Ib_Rin.json'
 ib_Rin_filename = os.path.join(folder, f'HP3458A-{sn}_Ib_Rin.json')
 
 """
@@ -207,5 +205,6 @@ dvm.close()
 src.close()
 RM.close()
 
+print('Saving data...')
 with open(f'{results_filename}', 'w') as Rin_results_fp:
     json.dump(results, Rin_results_fp, indent=4, cls=UrealEncoder)
