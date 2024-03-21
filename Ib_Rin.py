@@ -18,6 +18,7 @@ are calculated from a fit to the accumulated data.
 RESISTORS data: All uncertainties are expressed in the quantity units.
 u(t0) is in [days]; tau is in [days^-1].
 """
+import os
 import GTC
 import pyvisa as visa
 import json
@@ -26,50 +27,68 @@ import time
 import gmhstuff as gmh
 
 N_READINGS = 20
-RESISTORS = {'G493': {'R0': GTC.ureal(100000.255, 0.145, 125, 'G493_R0'),
-                      'alpha': GTC.ureal(-9.6e-7, 6.1e-7, 74, 'G493_alpha'),
-                      'T0': GTC.ureal(20.476, 0.035, 75, 'G494_T0'),
-                      'gamma': GTC.ureal(1.53e-8, 6.9e-9, 73, 'G493_gamma'),
-                      'V0': GTC.ureal(20.26, 2.97, 75, 'G493_V0'),
-                      'tau': GTC.ureal(4.18e-9, 2.8e-10, 74, 'G493_tau'),
-                      't0': '25/05/2019 16:26:30'},
-             'Al969': {'R0': GTC.ureal(1000001.50, 2.43, 91, 'Al969_R0'),
-                       'alpha': GTC.ureal(-1.6e-6, 4.2e-7, 129, 'Al969_alpha'),
-                       'T0': GTC.ureal(20.580, 0.028, 130, 'Al969_T0'),
-                       'gamma': GTC.ureal(5.09e-9, 3.0e-9, 128, 'Al969_gamma'),
-                       'V0': GTC.ureal(44.1, 3.8, 130, 'Al969_V0'),
-                       'tau': GTC.ureal(-6.6e-11, 2.6e-10, 129, 'Al969_tau'),
-                       't0': '04/11/2020 17:45:37'},
-             'C9736': {'R0': GTC.ureal(10001381, 60, 128, 'C9736_R0'),
-                       'alpha': GTC.ureal(-3.06e-6, 7.9e-7, 79, 'C9736_alpha'),
-                       'T0': GTC.ureal(20.546, 0.017, 80, 'C9736_T0'),
-                       'gamma': GTC.ureal(9.21e-9, 2.7e-9, 79, 'C9736_gamma'),
-                       'V0': GTC.ureal(46.7, 4.8, 80, 'C9736_V0'),
-                       'tau': GTC.ureal(4.3e-10, 2.3e-10, 79, 'C9736_tau'),
-                       't0': '31/10/2020 09:54:00'},
-             'C9620': {'R0': GTC.ureal(99998713, 856, 64, 'C9620_R0'),
-                       'alpha': GTC.ureal(7.9e-6, 1.4e-6, 56, 'C9620_alpha'),
-                       'T0': GTC.ureal(20.656, 0.025, 57, 'C9620_T0'),
-                       'gamma': GTC.ureal(4.0e-9, 6.1e-9, 56, 'C9620_gamma'),
-                       'V0': GTC.ureal(48.8, 5.9, 57, 'C9620_V0'),
-                       'tau': GTC.ureal(7.2e-10, 7.1e-10, 56, 'C9620_tau'),
-                       't0': '07/09/2020 08:50:44'},
-             'G003': {},  #
-             'C1G': {'R0': GTC.ureal(1004237779, 12763, 36, 'C1G_R0'),
-                     'alpha': GTC.ureal(-3.0e-5, 5.9e-6, 28, 'C1G_alpha'),
-                     'T0': GTC.ureal(20.720, 0.025, 29, 'C1G_T0'),
-                     'gamma': GTC.ureal(-2.2e-8, 1.7e-8, 28, 'C1G_gamma'),
-                     'V0': GTC.ureal(55.0, 8.4, 29, 'C1G_V0'),
-                     'tau': GTC.ureal(4.7e-8, 2.2e-7, 28, 'C1G_tau'),
-                     't0': '18/07/2020 09:27:11'},
-             'C10G': {},
-             'C100G': {},
-             'C1T': {},
-             }
-RESULTS = {}
 
+'''
+# ------------------------
+Useful Classes / Functions
+--------------------------
+'''
+
+
+class UrealEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, GTC.lib.UncertainReal):
+            return {'__ureal__': True, 'val': obj.x, 'unc': obj.u, 'dof': obj.df}
+        return super().default(obj)
+
+
+def as_ureal(dct):
+    if '__ureal__' in dct:
+        return GTC.ureal(dct['val'], dct['unc'], dct['dof'])
+    else:
+        return dct
+
+
+def measure():
+    dvm.write('LFREQ LINE')
+    time.sleep(1)
+    dvm.write('AZERO ONCE')
+    time.sleep(1)
+    v_readings = []
+    for n in range(N_READINGS):
+        reading = dvm.read()  # dvm.query('READ?')
+        print(reading)
+        Vbias.append(float(reading))
+    dvm.write('AZERO ON')
+    if len(v_readings) > 1:
+        v_av = GTC.ta.estimate(v_readings)
+    else:
+        v_av = 0  # No valid readings!
+    return v_av, v_readings
+
+# --------------------------------
+
+
+"""
+---------------------------------
+I/O Section & data storage
+---------------------------------
+"""
+# import Resistor info to RESISTORS dict
+with open('RESISTORS.json', 'r') as Resistors_fp:
+    RESISTORS = json.load(Resistors_fp, object_hook=as_ureal)
+
+# Data files
+folder = r'G:\My Drive\TechProcDev\Keithley6430-src-meter_Light'
 sn = input('\nEnter last 3 digits of 3458A serial number: ')
+# results_filename = os.path.join(folder, f'HP3458A-{sn}_Rin.json')
+ib_Rin_filename = os.path.join(folder, f'HP3458A-{sn}_Ib_Rin.json')
 
+"""
+---------------------------------
+Instruments Section
+---------------------------------
+"""
 # GPIB connection and dvm initialisation
 RM = visa.ResourceManager()
 print('\navailable visa resources:'
@@ -92,11 +111,21 @@ port = input('\nEnter GMH-probe COM port number: ')
 gmh530 = gmh.GMHSensor(port)
 print(f'gmh530 test-read: {gmh530.measure("T")}')
 
+"""
+-------------------------------
+Measurement Section starts here:
+-------------------------------
+"""
+try:
+    with open(f'{ib_Rin_filename}', 'r') as Ib_Rin_fp:  # Open existing results file so we can add to it.
+        results = json.load(Ib_Rin_fp, object_hook=as_ureal)
+except (FileNotFoundError, IOError):
+    results = {}  # Create results dict, if it doesn't exist as a json file yet.
 while True:
     # Test setup
     R_name = input(f'\nSelect resistor connected across DVM output (or Enter to break loop)\n{RESISTORS.keys()}: ')
     if R_name == '':
-        break
+        break  # END OF PROGRAM
     R0 = RESISTORS[R_name]['R0']
     alpha = RESISTORS[R_name]['alpha']
     T0 = RESISTORS[R_name]['T0']
@@ -106,55 +135,40 @@ while True:
     t0 = RESISTORS[R_name]['t0']
     t0_dt = dt.datetime.strptime(t0, '%d/%m/%Y %H:%M:%S')
 
-    """
-    -------------------------------
-    Measurement Section starts here:
-    -------------------------------
-    """
     # Grab a temperature reading
     T = GTC.ureal(float(gmh530.measure('T')[0]), 0.05, 8, 'T')  # Resistor temp with type-B uncert.
     t = dt.datetime.now()
     t_str = t.strftime('%d/%m/%Y %H:%M:%S')
-    # print(f'Timestamp: {t_str}')
     delta_t = t - t0_dt  # datetime.timedelta object
     delta_t_days = GTC.ureal(delta_t.days + delta_t.seconds/86400 + delta_t.microseconds/8.64e10, 0.1, 8, 'delta_t_days')
 
-    Vbias = []
-    dvm.write('LFREQ LINE')
-    time.sleep(1)
-    dvm.write('AZERO ONCE')
-    time.sleep(1)
-    for n in range(N_READINGS):
-        reading = dvm.read()  # dvm.query('READ?')
-        print(reading)
-        Vbias.append(float(reading))
-    dvm.write('AZERO ON')
-    Vav = GTC.ta.estimate(Vbias)
+    # The actual measurements happen here:
+    V_av, V_readings = measure()  # Measure V with Rs connected (ureal, list of floats)
 
-    # Ib calculation
-    R = R0*(1 + alpha * (T-T0) + gamma * (Vav - V0) + tau * delta_t_days)
+    # Calculate Ib and collate data
+    R = R0*(1 + alpha * (T-T0) + gamma * (V_av - V0) + tau * delta_t_days)
     print(f'\nTest resistor (corrected) = {R:1.3e}')
-    Ib_approx = Vav / R
+    Ib_approx = V_av / R  # Approx calculation, using a specific shunt resistor
     print(f'Input bias I = {Ib_approx:1.3e}')
 
     # Compile results dict
-    Ib_result = {R_name: {'T': T, 'V': Vav, 't': t_str,
-                          'R': R,  # 'R': {'val': R.x, 'unc': R.u, 'df': R.df},
-                          'Ib_approx': Ib_approx  # 'Ib': {'val': Ib_approx.x, 'unc': Ib_approx.u, 'df': Ib_approx.df}
+    Ib_result = {R_name: {'T': T, 't': t_str, 'R': R,
+                          'V': V_av, 'V_data': V_readings,
+                          'Ib_approx': Ib_approx
                           }
-                }
-    RESULTS.update(Ib_result)
+                 }
+    results.update(Ib_result)
 # End of measurement loop for this resistor
 
-print(f'\n{RESULTS}\n')
+print(f'\n{results}\n')
 
-if len(RESULTS) > 3:
+if len(results) > 3:
     # Do full calculation
     inv_R = []
     inv_V = []
-    for nom_R in RESULTS:
-        inv_R.append(1/(RESULTS[nom_R]['R']))  # inv_R.append(1/nom_R['R'])
-        inv_V.append(1/(RESULTS[nom_R]['V']))
+    for nom_R in results:
+        inv_R.append(1/(results[nom_R]['R']))
+        inv_V.append(1/(results[nom_R]['V']))
     inv_R_vals = [r.x for r in inv_R]
     inv_R_uncs = [r.u for r in inv_R]
     inv_V_vals = [v.x for v in inv_V]
@@ -166,32 +180,17 @@ if len(RESULTS) > 3:
     # c, m = GTC.ta.line_fit_wtls(inv_R_vals, inv_V_vals, inv_R_uncs, inv_V_uncs).a_b
     c, m = GTC.ta.line_fit_wls(inv_R_vals, inv_V_vals, inv_V_uncs).a_b
 
-    Ib = 1/m
+    Ib = 1/m  # Ib from fit of all Rs's
     Rin = m/c
-    RESULTS.update({'Ib': Ib, 'Rin': Rin})
+    results.update({'Ib': Ib, 'Rin': Rin})
     print(f'Final calculated values:\nIb = {Ib}\nRin = {Rin}')
-
-
-# Store data
-class UrealEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, GTC.lib.UncertainReal):
-            return {'__ureal__': True, 'val': obj.x, 'unc': obj.u, 'dof': obj.df}
-        return super().default(obj)
-
-
-def as_ureal(dct):
-    if '__ureal__' in dct:
-        return GTC.ureal(dct['val'], dct['unc'], dct['dof'])
-    else:
-        return dct
 
 
 # Store data
 filename = f'HP3458A-{sn}_Ib_Rin'
 print(f'Storing data in "{filename}.json"...')
 with open(f'{filename}', 'w') as json_file:
-    json.dump(RESULTS, json_file, indent=4, cls=UrealEncoder)
+    json.dump(results, json_file, indent=4, cls=UrealEncoder)
 
 # Retrieve data and pretty-print
 print('\nRetrieved data:')

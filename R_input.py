@@ -27,13 +27,11 @@ import gmhstuff as gmh
 
 N_READINGS = 20
 
-"""
-------------------------------
-JSON <-> ureal class, function
-------------------------------
-"""
-
-
+'''
+# ------------------------
+Useful Classes / Functions
+--------------------------
+'''
 class UrealEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, GTC.lib.UncertainReal):
@@ -46,7 +44,6 @@ def as_ureal(dct):
         return GTC.ureal(dct['val'], dct['unc'], dct['dof'])
     else:
         return dct
-# ---------------------------------
 
 
 def measure(vset):
@@ -86,7 +83,7 @@ def measure(vset):
     dvm.write('AZERO ON')
     src.write('OUT 0V,0Hz')
     src.write('STBY')
-    return v_av
+    return v_av, v_readings
 
 
 def dud_ureal(u_lst):
@@ -100,6 +97,9 @@ def dud_ureal(u_lst):
         if u.df == float('NaN'):
             return True
     return False
+# --------------------------------------------------
+
+
 """
 ---------------------------------
 I/O Section & data storage
@@ -148,7 +148,6 @@ port = input('\nEnter GMH-probe COM-port number: ')  # 4
 gmh530 = gmh.GMHSensor(port)
 print(f'gmh530 test-read: {gmh530.measure("T")}')
 
-
 """
 -------------------------------
 Measurement Section starts here:
@@ -189,9 +188,9 @@ while True:  # 1 loop for each [Rs, Vset] combination
                              'delta_t_days')
 
     # The actual measurements happen here:
-    V_av = measure(Vset)  # Measure V with Rs connected (ureal)
+    V_av, V_readings = measure(Vset)  # Measure V with Rs connected (ureal)
     dummy = input(f'Bypass Rs, then press ENTER when completed.')
-    Vs_av = measure(Vset)  # Measure Vs with Rs shorted (ureal)
+    Vs_av, Vs_readings = measure(Vset)  # Measure Vs with Rs shorted (ureal, list of floats)
 
     # NOTE: Rs voltage-drop is (Vs_av - V_av)!
     R = R0 * (1 + alpha * (T - T0) + gamma * ((Vs_av - V_av) - V0) + tau * delta_t_days)
@@ -202,11 +201,16 @@ while True:  # 1 loop for each [Rs, Vset] combination
     Ib_approx = ib_Rin_dict[R_name]['Ib_approx']  # Rs-specific Ib
     Ib = ib_Rin_dict['Ib']  # Ib from fit of all Rs's
 
-    # Calculate Rin
+    # Calculate Rin and collate data
     Rin = R*V_av/(Vs_av - V_av + Ib*R)
     Rin_approx = R * V_av / (Vs_av - V_av + Ib_approx*R)
     print(f'\nRin = {Rin}\nRin_approx = {Rin_approx}')
-    result = {f'{R_name}_V{Vset}': {'t': t_str, 'Rs': R, 'Vs': Vs_av, 'V': V_av, 'Rin': Rin, 'Rin_approx': Rin_approx}}
+    result = {f'{R_name}_V{Vset}': {'t': t_str, 'Rs': R,
+                                    'Vs': Vs_av, 'Vs_data': Vs_readings,
+                                    'V': V_av, 'V_data': V_readings,
+                                    'Rin': Rin, 'Rin_approx': Rin_approx
+                                    }
+              }
     if dud_ureal([Rin, Rin_approx]):
         print('This test is dud and will be skipped!')
     else:
