@@ -58,7 +58,7 @@ def measure(vset):
 
     src.write(f'OUT {vset}V,0Hz')
     src.write('OPER')
-    time.sleep(5)
+    time.sleep(60)
 
     dvm.write(f'LFREQ LINE')
     time.sleep(1)
