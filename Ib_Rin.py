@@ -58,7 +58,7 @@ def measure():
     for n in range(N_READINGS):
         reading = dvm.read()  # dvm.query('READ?')
         print(reading)
-        Vbias.append(float(reading))
+        v_readings.append(float(reading))
     dvm.write('AZERO ON')
     if len(v_readings) > 1:
         v_av = GTC.ta.estimate(v_readings)
