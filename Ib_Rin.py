@@ -81,7 +81,6 @@ with open('RESISTORS.json', 'r') as Resistors_fp:
 # Data files
 folder = r'G:\My Drive\TechProcDev\Keithley6430-src-meter_Light'
 sn = input('\nEnter last 3 digits of 3458A serial number: ')
-# results_filename = os.path.join(folder, f'HP3458A-{sn}_Rin.json')
 ib_Rin_filename = os.path.join(folder, f'HP3458A-{sn}_Ib_Rin.json')
 
 """
@@ -166,17 +165,15 @@ if len(results) > 3:
     # Do full calculation
     inv_R = []
     inv_V = []
-    for nom_R in results:
-        inv_R.append(1/(results[nom_R]['R']))
-        inv_V.append(1/(results[nom_R]['V']))
+    for res_name in results:
+        if res_name not in ['Ib', 'Rin']:
+            inv_R.append(1/results[res_name]['R'])
+            inv_V.append(1/results[res_name]['V'])
     inv_R_vals = [r.x for r in inv_R]
     inv_R_uncs = [r.u for r in inv_R]
     inv_V_vals = [v.x for v in inv_V]
     inv_V_uncs = [v.u for v in inv_V]
-    print(f'inv_R_vals: {inv_R_vals}\n'
-          f'inv_R_uncs: {inv_R_uncs}\n'
-          f'inv_V_vals: {inv_V_vals}\n'
-          f'inv_V_uncs: {inv_V_uncs}')
+
     # c, m = GTC.ta.line_fit_wtls(inv_R_vals, inv_V_vals, inv_R_uncs, inv_V_uncs).a_b
     c, m = GTC.ta.line_fit_wls(inv_R_vals, inv_V_vals, inv_V_uncs).a_b
 
@@ -187,13 +184,12 @@ if len(results) > 3:
 
 
 # Store data
-filename = f'HP3458A-{sn}_Ib_Rin'
-print(f'Storing data in "{filename}.json"...')
-with open(f'{filename}', 'w') as json_file:
+print(f'Storing data in "{ib_Rin_filename}"...')
+with open(f'{ib_Rin_filename}', 'w') as json_file:
     json.dump(results, json_file, indent=4, cls=UrealEncoder)
 
 # Retrieve data and pretty-print
-print('\nRetrieved data:')
-with open(f'{filename}', 'r') as json_ip:
-    json_str = json.load(json_ip, object_hook=as_ureal)
-print(json_str)
+# print('\nRetrieved data:')
+# with open(f'{filename}', 'r') as json_ip:
+#     json_str = json.load(json_ip, object_hook=as_ureal)
+# print(json_str)
