@@ -52,18 +52,19 @@ def measure(vset):
     vset: str (Nominal source voltage setting)
     rtn: ureal (mean measured voltage)
     """
+    az_delay = float(input('AZERO delay (s): '))
     # Prepare DVM and SRC for measurement
     dvm.write(f'DCV {vset}')
     time.sleep(0.1)
 
     src.write(f'OUT {vset}V,0Hz')
     src.write('OPER')
-    time.sleep(60)
+    time.sleep(5)
 
     dvm.write(f'LFREQ LINE')
     time.sleep(1)
     dvm.write('AZERO ONCE')
-    time.sleep(1)
+    time.sleep(az_delay)
 
     # Measurement loop - V
     v_readings = []
@@ -189,7 +190,7 @@ while True:  # 1 loop for each [Rs, Vset] combination
 
     # The actual measurements happen here:
     V_av, V_readings = measure(Vset)  # Measure V with Rs connected (ureal)
-    dummy = input(f'Bypass Rs, then press ENTER when completed.')
+    dummy = input(f'Bypass Rs, then press ENTER when ready.')
     Vs_av, Vs_readings = measure(Vset)  # Measure Vs with Rs shorted (ureal, list of floats)
 
     # NOTE: Rs voltage-drop is (Vs_av - V_av)!
@@ -225,7 +226,3 @@ while True:  # 1 loop for each [Rs, Vset] combination
 dvm.close()
 src.close()
 RM.close()
-
-# print('Saving data...')
-# with open(f'{results_filename}', 'w') as Rin_results_fp:
-#     json.dump(results, Rin_results_fp, indent=4, cls=UrealEncoder)
