@@ -25,7 +25,16 @@ import datetime as dt
 import time
 import gmhstuff as gmh
 
-N_READINGS = 20
+N_READINGS = 10
+POLARITY_MASK = [0, 1, -1, 0, -1, 1, 0]
+DELAYS = {'C10G': 100,  # 100
+          'C1G': 30,
+          'C100M': 10,
+          'C10M': 5,
+          'Al969': 2,
+          'G493': 1,
+          'short': 1
+          }
 
 '''
 # ------------------------
@@ -46,45 +55,51 @@ def as_ureal(dct):
         return dct
 
 
-def measure(vset):
+def measure(R_name, vset):
     """
     Measurement loop function.
     vset: str (Nominal source voltage setting)
     rtn: ureal (mean measured voltage)
     """
-    az_delay = float(input('AZERO delay (s): '))
-    # Prepare DVM and SRC for measurement
-    dvm.write(f'DCV {vset}')
-    time.sleep(0.1)
+    az_delay = DELAYS[R_name]
+    v_readings = {-1: [], 0: [], 1: []}  # Dict of empty lists for readings
 
-    src.write(f'OUT {vset}V,0Hz')
-    src.write('OPER')
-    time.sleep(5)
+    for pol in POLARITY_MASK:
+        v_src = vset*pol
+        print(f'\nv_src = {v_src} V')
+        # Prepare DVM and SRC for measurement
+        dvm.write(f'DCV {v_src}')
+        time.sleep(0.1)
 
-    dvm.write(f'LFREQ LINE')
-    time.sleep(1)
-    dvm.write('AZERO ONCE')
-    time.sleep(az_delay)
+        src.write(f'OUT {v_src}V,0Hz')
+        src.write('OPER')
+        time.sleep(5)
 
-    # Measurement loop - V
-    v_readings = []
-    for n in range(N_READINGS):
-        reading = dvm.read()  # dvm.query('READ?')
-        if abs(float(reading)) > 10*float(vset):
-            print(f'{reading} too high! - skipped')
-            continue
-        print(reading)
-        v_readings.append(float(reading))
-    if len(v_readings) > 1:
-        v_av = GTC.ta.estimate(v_readings)
-    else:
-        v_av = 0  # No valid readings!
+        dvm.write(f'LFREQ LINE')
+        time.sleep(1)
+        dvm.write('AZERO ONCE')
+        print(f'AZERO delay ({az_delay} s)...')
+        time.sleep(az_delay)
 
-    # Set DVM and SRC to 'safe mode'
-    dvm.write('AZERO ON')
-    src.write('OUT 0V,0Hz')
-    src.write('STBY')
-    return v_av, v_readings
+        # Measurement loop - V
+        for n in range(N_READINGS):
+            reading = dvm.read()  # dvm.query('READ?')
+            if abs(float(reading)) > abs(10*v_src) and pol != 0:
+                print(f'{reading} too high! - skipped')
+                continue
+            print(reading)
+            v_readings[pol].append(float(reading))
+        # if len(v_readings) > 1:
+        #     v_av = GTC.ta.estimate(v_readings)
+        # else:
+        #     v_av = 0  # No valid readings!
+
+        # Set DVM and SRC to 'safe mode'
+        dvm.write('AZERO ON')
+        src.write('OUT 0V,0Hz')
+        src.write('STBY')
+
+    return v_readings
 
 
 def dud_ureal(u_lst):
@@ -135,7 +150,11 @@ try:
     dvm.timeout = 2000
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to dvm!')  # 4
+
+rply = dvm.query('ID?')
+print(f'DVM at GPIB addr {addr_dvm} response: {rply}')
 dvm.write('DCV 100; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
+
 
 # Source initialisation
 addr_src = input('\nEnter source GPIB address: ')
@@ -171,8 +190,8 @@ while True:  # 1 loop for each [Rs, Vset] combination
         t0 = RESISTORS[R_name]['t0']
         t0_dt = dt.datetime.strptime(t0, '%d/%m/%Y %H:%M:%S')
 
-        Vset = input('\nSupply voltage: ')
-        nom_current = float(Vset)/R0.x
+        Vset = float(input('\nSupply voltage: '))
+        nom_current = Vset/R0.x
         resp = input(f'Nominal current = {nom_current:.1e} A. Continue with test (y/n)?')
         if resp == 'y':
             break  # Parameters locked-in
@@ -188,12 +207,30 @@ while True:  # 1 loop for each [Rs, Vset] combination
     delta_t_days = GTC.ureal(delta_t.days + delta_t.seconds / 86400 + delta_t.microseconds / 8.64e10, 0.1, 8,
                              'delta_t_days')
 
-    # The actual measurements happen here:
-    V_av, V_readings = measure(Vset)  # Measure V with Rs connected (ureal)
-    dummy = input(f'Bypass Rs, then press ENTER when ready.')
-    Vs_av, Vs_readings = measure(Vset)  # Measure Vs with Rs shorted (ureal, list of floats)
+    # ************ The actual measurements happen here: *******************
+    V_readings = measure(R_name, Vset)  # Measure V with Rs connected (dict of lists)
+    if len(V_readings[1]) < 1:
+        continue  # Skip, if no valid readings
+    print(input(f'Bypass Rs, then press ENTER when ready.'))
+    Vs_readings = measure('short', Vset)  # Measure Vs with Rs shorted (dict of lists)
+    if len(Vs_readings[1]) < 1:
+        continue  # Skip, if no valid readings
+    # *********************************************************************
 
-    # NOTE: Rs voltage-drop is (Vs_av - V_av)!
+    # ************************** Calculations *****************************
+    V_drift = GTC.ta.estimate(V_readings[0])  # Zero-drift at mid-point
+    Vp = GTC.ta.estimate(V_readings[1]) - V_drift  # Drift-corrected - subtract zero-drift at mid-point
+    Vn = GTC.ta.estimate(V_readings[-1]) - V_drift  # Drift-corrected - subtract zero-drift at mid-point
+    V_off = (Vp + Vn)/2  # Offset in Rs-loaded voltage
+    V_av = (Vp - Vn)/2 - V_off
+
+    Vs_drift = GTC.ta.estimate(Vs_readings[0])  # Zero-drift at mid-point
+    Vsp = GTC.ta.estimate(Vs_readings[1]) - V_drift/2  # Drift-corrected - subtract zero-drift at mid-point
+    Vsn = GTC.ta.estimate(Vs_readings[-1]) - V_drift/2  # Drift-corrected - subtract zero-drift at mid-point
+    Vs_off = (Vsp + Vsn) / 2  # Offset in source voltage
+    Vs_av = (Vsp - Vsn) / 2 - Vs_off
+
+    # Rs correction - NOTE: Rs voltage-drop is (Vs_av - V_av)!
     R = R0 * (1 + alpha * (T - T0) + gamma * ((Vs_av - V_av) - V0) + tau * delta_t_days)
 
     # import Ib info
@@ -204,14 +241,16 @@ while True:  # 1 loop for each [Rs, Vset] combination
 
     # Calculate Rin and collate data
     Rin = R*V_av/(Vs_av - V_av + Ib*R)
-    Rin_approx = R * V_av / (Vs_av - V_av + Ib_approx*R)
+    Rin_approx = R * V_av / (Vs_av - V_av + Ib_approx*R)  # **** This is probably the more reliable value *****
     print(f'\nRin = {Rin}\nRin_approx = {Rin_approx}')
-    result = {f'{R_name}_V{Vset}': {'t': t_str, 'Rs': R,
-                                    'Vs': Vs_av, 'Vs_data': Vs_readings,
-                                    'V': V_av, 'V_data': V_readings,
+    result = {f'{R_name}_V{Vset}': {'t': t_str, 'Rs': R, 'Vs': Vs_av, 'V': V_av,
+                                    'Vsn_data': Vs_readings[-1], 'Vs0_data': Vs_readings[0], 'Vsp_data': Vs_readings[1],
+                                    'Vn_data': V_readings[-1], 'V0_data': V_readings[0], 'Vp_data': V_readings[1],
                                     'Rin': Rin, 'Rin_approx': Rin_approx
                                     }
               }
+    # *********************************************************************
+
     if dud_ureal([Rin, Rin_approx]):
         print('This test is dud and will be skipped!')
     else:
