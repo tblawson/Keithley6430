@@ -50,10 +50,11 @@ def as_ureal(dct):
 
 
 def measure():
+    az_delay = float(input('AZERO delay (s): '))
     dvm.write('LFREQ LINE')
     time.sleep(1)
     dvm.write('AZERO ONCE')
-    time.sleep(1)
+    time.sleep(az_delay)
     v_readings = []
     for n in range(N_READINGS):
         reading = dvm.read()  # dvm.query('READ?')
@@ -182,14 +183,7 @@ if len(results) > 3:
     results.update({'Ib': Ib, 'Rin': Rin})
     print(f'Final calculated values:\nIb = {Ib}\nRin = {Rin}')
 
-
 # Store data
 print(f'Storing data in "{ib_Rin_filename}"...')
 with open(f'{ib_Rin_filename}', 'w') as json_file:
     json.dump(results, json_file, indent=4, cls=UrealEncoder)
-
-# Retrieve data and pretty-print
-# print('\nRetrieved data:')
-# with open(f'{filename}', 'r') as json_ip:
-#     json_str = json.load(json_ip, object_hook=as_ureal)
-# print(json_str)
