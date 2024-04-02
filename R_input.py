@@ -199,11 +199,11 @@ while True:  # 1 loop for each [Rs, Vset] combination
     with open(f'{ib_Rin_filename}', 'r') as ib_Rin_fp:
         ib_Rin_dict = json.load(ib_Rin_fp, object_hook=as_ureal)
     Ib_approx = ib_Rin_dict[R_name]['Ib_approx']  # Rs-specific Ib
-    Ib = ib_Rin_dict['Ib']  # Ib from fit of all Rs's
+    Ib = ib_Rin_dict['Ib']  # Ib from fit of all Rs's - may not be as accurate!
 
     # Calculate Rin and collate data
     Rin = R*V_av/(Vs_av - V_av + Ib*R)
-    Rin_approx = R * V_av / (Vs_av - V_av + Ib_approx*R)
+    Rin_approx = R * V_av / (Vs_av - V_av + Ib_approx*R)  # Use this value!
     print(f'\nRin = {Rin}\nRin_approx = {Rin_approx}')
     result = {f'{R_name}_V{Vset}': {'t': t_str, 'Rs': R,
                                     'Vs': Vs_av, 'Vs_data': Vs_readings,
