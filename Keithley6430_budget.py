@@ -64,8 +64,8 @@ delta_t_days = GTC.ureal(delta_t.days + delta_t.seconds / 86400 + delta_t.micros
                          'delta_t_days')
 
 V_off = GTC.ureal(6e-7, 3e-8, 9, 'V_off')
-V_on_args = input(f'Measured Vs as val, unc, dof: ').split(',')
-V_on = GTC.ureal(*map(float, V_on_args))
+V_on_val = float(input(f'Measured Vs value: '))
+V_on = GTC.ureal(V_on_val, 1e-7, 9, 'V_on')
 
 #  DVM input
 key = f'{R_name}_V{V_on.x}'
@@ -96,7 +96,7 @@ print('Parameter\tUncert. \tSens. coef.\tU contrib (A)')
 for param in params:
     sens = GTC.reporting.sensitivity(Imeas, params[param])
     u_cont = GTC.component(Imeas, params[param])
-    unc = params[param].x
+    unc = params[param].u
     print(f'{param:9}\t{unc:9.3g}\t{sens:11.3g}\t{u_cont:13.3g}')
 
 print(f'\nI = {Imeas.x:.6e} +/- {Imeas.u:.1e}, dof = {Imeas.df:.1f}')
