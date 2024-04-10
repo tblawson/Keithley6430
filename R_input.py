@@ -7,8 +7,9 @@ of a meter.
 
 The value of Ib obtained from Ib_Rin.py can be used as input.
 
-Workflow progresses by connecting a known resistor in series with a source across the dvm input
-and measuring the voltage both with and without the resistor shorted.
+Workflow progresses by connecting [a known resistor in series with a source] across the dvm input
+and measuring the voltage both with and without the resistor shorted (Vs is the source voltage,
+obtained when the resistor is shorted).
 
 Rin = R*V/(Vs - V + Ib*R) is then calculated from a table of known resistor values, Ib and
 the mean of the voltage readings in each circuit configuration.
