@@ -14,6 +14,8 @@ import os
 Useful Classes / Functions
 --------------------------
 '''
+
+
 class UrealEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, GTC.lib.UncertainReal):

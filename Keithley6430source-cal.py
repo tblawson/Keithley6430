@@ -90,4 +90,19 @@ except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to Keithley 6430!')
 
 
+# Gather info for this test
+high_i_method = None
+i_set = float(input(f'Enter 6430 current source setting: '))
+if i_set < 100e-6:
+    high_i_method = False
+elif i_set > 100e-6:
+    high_i_method = True
+else:
+    response = input('Use high-I method? (y / n)? ')
+    if response == 'y':
+        high_i_method = True
+    else:
+        high_i_method = False
+
+
 # dvm.write('DCV 100; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
