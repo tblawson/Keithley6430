@@ -66,23 +66,26 @@ print('\navailable visa resources:'
       f'\n{RM.list_resources()}')
 
 # Instrument initialisation
-# Use 3458A, s/n452 at address 25
+addr_dvm = 25  # Use 3458A, s/n452 at address 25
 try:
-    dvm = RM.open_resource('GPIB1::25::INSTR')
+    dvm = RM.open_resource(f'GPIB1::{addr_dvm}::INSTR')
     dvm.read_termination = '\r\n'
     dvm.write_termination = '\r\n'
     dvm.timeout = 2000
     rply = dvm.query('ID?')
-    print(f'DVM response: {rply}')
+    print(f'DVM response (addr{addr_dvm}): {rply}')
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to dvm!')
 
-addr_K6430 = input('\nEnter Keithley GPIB address: ')
+addr_K6430 = 20  # input('\nEnter Keithley GPIB address: ')
+# cmd = input('Keithley cmd: ')
 try:
     K6430 = RM.open_resource(f'GPIB1::{addr_K6430}::INSTR')
+    K6430.read_termination = '\n'
+    K6430.write_termination = '\n'
     K6430.timeout = 2000
-    rply = K6430.query('ID?')
-    print(f'Keithley 6430 response: {rply}')
+    rply = K6430.query('*IDN?')
+    print(f'Keithley 6430 response (addr{addr_K6430}): {rply}')
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to Keithley 6430!')
 

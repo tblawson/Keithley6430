@@ -42,6 +42,8 @@ DELAYS = {'C10G': 100,  # 100
 Useful Classes / Functions
 --------------------------
 '''
+
+
 class UrealEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, GTC.lib.UncertainReal):
@@ -62,7 +64,7 @@ def measure(R_name, vset):
     vset: str (Nominal source voltage setting)
     rtn: ureal (mean measured voltage)
     """
-    az_delay = DELAYS[R_name]
+    az_delay = soak_delay = DELAYS[R_name]
     v_readings = {-1: [], 0: [], 1: []}  # Dict of empty lists for readings
 
     for pol in POLARITY_MASK:
@@ -74,7 +76,8 @@ def measure(R_name, vset):
 
         src.write(f'OUT {v_src}V,0Hz')
         src.write('OPER')
-        time.sleep(5)
+        print(f'Voltage soak delay ({soak_delay} s)...')
+        time.sleep(soak_delay)
 
         dvm.write(f'LFREQ LINE')
         time.sleep(1)
@@ -90,10 +93,6 @@ def measure(R_name, vset):
                 continue
             print(reading)
             v_readings[pol].append(float(reading))
-        # if len(v_readings) > 1:
-        #     v_av = GTC.ta.estimate(v_readings)
-        # else:
-        #     v_av = 0  # No valid readings!
 
         # Set DVM and SRC to 'safe mode'
         dvm.write('AZERO ON')
