@@ -77,12 +77,15 @@ try:
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to dvm!')
 
-addr_K6430 = input('\nEnter Keithley GPIB address: ')
+addr_K6430 = 20  # input('\nEnter Keithley GPIB address: ')
+# cmd = input('Keithley cmd: ')
 try:
     K6430 = RM.open_resource(f'GPIB1::{addr_K6430}::INSTR')
+    K6430.read_termination = '\n'
+    K6430.write_termination = '\n'
     K6430.timeout = 2000
-    rply = K6430.query('ID?')
-    print(f'Keithley 6430 response: {rply}')
+    rply = K6430.query('*IDN?')
+    print(f'Keithley 6430 response (addr{addr_K6430}): {rply}')
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to Keithley 6430!')
 
