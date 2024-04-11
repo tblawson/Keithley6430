@@ -66,14 +66,14 @@ print('\navailable visa resources:'
       f'\n{RM.list_resources()}')
 
 # Instrument initialisation
-# Use 3458A, s/n452 at address 25
+addr_dvm = 25  # Use 3458A, s/n452 at address 25
 try:
-    dvm = RM.open_resource('GPIB1::25::INSTR')
+    dvm = RM.open_resource(f'GPIB1::{addr_dvm}::INSTR')
     dvm.read_termination = '\r\n'
     dvm.write_termination = '\r\n'
     dvm.timeout = 2000
     rply = dvm.query('ID?')
-    print(f'DVM response: {rply}')
+    print(f'DVM response (addr{addr_dvm}): {rply}')
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to dvm!')
 
