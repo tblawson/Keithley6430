@@ -46,8 +46,8 @@ def measure(iset):
     iset: str (Nominal source voltage setting)
     rtn: Dict of lists for readings
     """
-    az_delay = 5  # soak_delay = DELAYS[R_name]
-    v_readings = {-1: [], 0: [], 1: []}  # Dict of empty lists for readings
+    az_delay = 5
+    i_readings = {-1: [], 0: [], 1: []}  # Dict of empty lists for readings
     K6430.write('*RST')  # Reset 6430 to default state
     time.sleep(5)
 
@@ -78,13 +78,13 @@ def measure(iset):
                 print(f'{reading} too high! - skipped')
                 continue
             print(reading)
-            v_readings[pol].append(float(reading))
+            i_readings[pol].append(float(reading))
 
         # Set 3458 and 6430 to 'safe mode'
         dvm.write('AZERO ON')
         K6430.write(f'SOURce:CURRent:RANGe {0};LEVel {0};OUTPut OFF')
 
-    return v_readings
+    return i_readings
 
 
 """
@@ -130,10 +130,10 @@ try:
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to dvm!')
 
-    dvm452_I_corrections = {1e-4: GTC.ureal(1.0000024, 2.3e-6, 87),
-                            1e-3: GTC.ureal(0.99999672, 7.7e-7, 29),
-                            1e-2: GTC.ureal(0.99999394, 9.8e-7, 64)
-                            }
+dvm452_I_corrections = {1e-4: GTC.ureal(1.0000024, 2.3e-6, 87),
+                        1e-3: GTC.ureal(0.99999672, 7.7e-7, 29),
+                        1e-2: GTC.ureal(0.99999394, 9.8e-7, 64)
+                        }
 
 addr_K6430 = 20  # input('\nEnter Keithley GPIB address: ')
 try:
@@ -143,9 +143,9 @@ try:
     K6430.timeout = 2000
     rply = K6430.query('*IDN?')
     print(f'Keithley 6430 response (addr{addr_K6430}): {rply}')
+    dvm.write('DCI 0.01; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to Keithley 6430!')
-
 
 # GMH
 port = 4  # input('\nEnter GMH-probe COM-port number: ')
@@ -180,7 +180,23 @@ while True:  # 1 loop for each I-setting or test
 
         i_readings = measure(i_set)  # 3458a current readings
 
-    else:  # 1 pA to 100 uA
-        pass
+        # ************************** Calculations *****************************
+        corrn = dvm452_I_corrections[abs(i_set)]  # IS CORRECTION POLARITY-DEPENDENT?
+        I_drift = GTC.ta.estimate(i_readings[0])  # Zero-drift at mid-point
+        Ip = (GTC.ta.estimate(i_readings[1]) - I_drift)*corrn  # Drift- and gain-corrected
+        In = (GTC.ta.estimate(i_readings[-1]) - I_drift)*corrn  # Drift- and gain-corrected
+        I_off = (Ip + In)/2  # Offset in Rs-loaded voltage
+        I_av = (Ip - In)/2 - I_off
 
-# dvm.write('DCV 100; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
+        result = {'I_set': i_set, 'data': i_readings, 'high-I-method': high_i_method}
+    else:  # 1 pA to 100 uA
+        print('pretending to do something useful')
+
+    results.update(result)
+    resp = input('Continue with another Rs / test-V (y/n)? ')
+    if resp == 'n':
+        break
+
+dvm.close()
+K6430.close()
+RM.close()
