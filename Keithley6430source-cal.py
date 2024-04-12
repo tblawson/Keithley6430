@@ -181,19 +181,26 @@ while True:  # 1 loop for each I-setting or test
         i_readings = measure(i_set)  # 3458a current readings
 
         # ************************** Calculations *****************************
-        corrn = dvm452_I_corrections[abs(i_set)]  # IS CORRECTION POLARITY-DEPENDENT?
+        corrn452 = dvm452_I_corrections[abs(i_set)]  # IS CORRECTION POLARITY-DEPENDENT?
         I_drift = GTC.ta.estimate(i_readings[0])  # Zero-drift at mid-point
-        Ip = (GTC.ta.estimate(i_readings[1]) - I_drift)*corrn  # Drift- and gain-corrected
-        In = (GTC.ta.estimate(i_readings[-1]) - I_drift)*corrn  # Drift- and gain-corrected
+        Ip = (GTC.ta.estimate(i_readings[1]) - I_drift)*corrn452  # Drift- and gain-corrected
+        In = (GTC.ta.estimate(i_readings[-1]) - I_drift)*corrn452  # Drift- and gain-corrected
         I_off = (Ip + In)/2  # Offset in Rs-loaded voltage
         I_av = (Ip - In)/2 - I_off
+        src_corrn = I_av/i_set
 
-        result = {'I_set': i_set, 'data': i_readings, 'high-I-method': high_i_method}
+        result = {'I_set': i_set, 'high-I-method': high_i_method, 'data': i_readings, 'correction': src_corrn}
     else:  # 1 pA to 100 uA
         print('pretending to do something useful')
+        v_readings = []
+        src_corrn = 1
+        result = {'I_set': i_set, 'high-I-method': high_i_method, 'data': v_readings, 'correction': src_corrn}
 
     results.update(result)
-    resp = input('Continue with another Rs / test-V (y/n)? ')
+    print('Saving data...')
+    with open(f'{results_filename}', 'w') as results_fp:
+        json.dump(results, results_fp, indent=4, cls=UrealEncoder)
+    resp = input('Continue with another test (y/n)? ')
     if resp == 'n':
         break
 
