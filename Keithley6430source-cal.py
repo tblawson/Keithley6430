@@ -53,13 +53,14 @@ def measure(iset):
 
     for pol in POLARITY_MASK:
         i_src = iset*pol
-        print(f'\ni_src = {i_src} V')
+        print(f'\ni_src = {i_src} A')
         # Prepare 3458 and 6430 for measurement
         dvm.write(f'DCI {i_src}')  # Set DCI mode and range on meter
         time.sleep(0.1)
 
-        K6430.write('SOURce:FUNCtion CURRent;CURRent:MODE AUTO')
-        K6430.write(f'SOURce:CURRent:RANGe {iset};LEVel {iset};OUTPut ON')
+        K6430.write(f'SOURce:CURRent:RANGe {iset}')  # {iset}
+        K6430.write(f'SOURce:CURRent:LEVel {i_src};')
+        K6430.write(f'OUTPut ON;')
         time.sleep(1)
 
         # print(f'Voltage soak delay ({soak_delay} s)...')
@@ -126,7 +127,8 @@ try:
     dvm.write_termination = '\r\n'
     dvm.timeout = 2000
     rply = dvm.query('ID?')
-    print(f'DVM response (addr{addr_dvm}): {rply}')
+    print(f'DVM response (addr{addr_dvm}): {rply}\n')
+    dvm.write('DCI 0.01; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to dvm!')
 
@@ -142,8 +144,9 @@ try:
     K6430.write_termination = '\n'
     K6430.timeout = 2000
     rply = K6430.query('*IDN?')
-    print(f'Keithley 6430 response (addr{addr_K6430}): {rply}')
-    dvm.write('DCI 0.01; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
+    print(f'Keithley 6430 response (addr{addr_K6430}): {rply}\n')
+    K6430.write('SOURce:FUNCtion CURRent')
+    K6430.write('SOURce:CURRent:MODE FIXed')
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to Keithley 6430!')
 
@@ -171,12 +174,14 @@ else:  # 100 uA can be done using either method
 Measurement Section starts here:
 -------------------------------
 """
+
 while True:  # 1 loop for each I-setting or test
+    # Grab a timestamp
+    t = dt.datetime.now()
+    t_str = t.strftime('%d/%m/%Y %H:%M:%S')
+    print(f'Timestamp: {t_str}\n')
     if high_i_method:  # 100 uA to 10 mA
-        # Grab a timestamp
-        t = dt.datetime.now()
-        t_str = t.strftime('%d/%m/%Y %H:%M:%S')
-        print(f'Timestamp: {t_str}\n')
+        print(input(f'Ensure 6430 output is connected to I-meter input. Press ENTER when ready.'))
 
         i_readings = measure(i_set)  # 3458a current readings
 
@@ -189,8 +194,10 @@ while True:  # 1 loop for each I-setting or test
         I_av = (Ip - In)/2 - I_off
         src_corrn = I_av/i_set
 
-        result = {'I_set': i_set, 'high-I-method': high_i_method, 'data': i_readings, 'correction': src_corrn}
+        result = {'I_set': i_set, 'high-I-method': high_i_method, 'timestamp': t_str,
+                  'data': i_readings, 'correction': src_corrn}
     else:  # 1 pA to 100 uA
+        print(input(f'Connect 6430 output to [Rs in parallel to dvm]. Press ENTER when ready.'))
         print('pretending to do something useful')
         v_readings = []
         src_corrn = 1
