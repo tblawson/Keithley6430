@@ -40,6 +40,53 @@ def as_ureal(dct):
         return dct
 
 
+def measure(iset):
+    """
+    Measurement loop function.
+    iset: str (Nominal source voltage setting)
+    rtn: Dict of lists for readings
+    """
+    az_delay = 5  # soak_delay = DELAYS[R_name]
+    v_readings = {-1: [], 0: [], 1: []}  # Dict of empty lists for readings
+    K6430.write('*RST')  # Reset 6430 to default state
+    time.sleep(5)
+
+    for pol in POLARITY_MASK:
+        i_src = iset*pol
+        print(f'\ni_src = {i_src} V')
+        # Prepare 3458 and 6430 for measurement
+        dvm.write(f'DCI {i_src}')  # Set DCI mode and range on meter
+        time.sleep(0.1)
+
+        K6430.write('SOURce:FUNCtion CURRent;CURRent:MODE AUTO')
+        K6430.write(f'SOURce:CURRent:RANGe {iset};LEVel {iset};OUTPut ON')
+        time.sleep(1)
+
+        # print(f'Voltage soak delay ({soak_delay} s)...')
+        # time.sleep(soak_delay)
+
+        dvm.write(f'LFREQ LINE')
+        time.sleep(1)
+        dvm.write('AZERO ONCE')
+        print(f'AZERO delay ({az_delay} s)...')
+        time.sleep(az_delay)
+
+        # Measurement loop - I
+        for n in range(N_READINGS):
+            reading = dvm.read()  # dvm.query('READ?')
+            if abs(float(reading)) > abs(10*i_src) and pol != 0:
+                print(f'{reading} too high! - skipped')
+                continue
+            print(reading)
+            v_readings[pol].append(float(reading))
+
+        # Set 3458 and 6430 to 'safe mode'
+        dvm.write('AZERO ON')
+        K6430.write(f'SOURce:CURRent:RANGe {0};LEVel {0};OUTPut OFF')
+
+    return v_readings
+
+
 """
 ---------------------------------
 I/O Section & data storage
@@ -52,8 +99,14 @@ with open('RESISTORS.json', 'r') as Resistors_fp:
 # Data files
 folder = r'G:\My Drive\TechProcDev\Keithley6430-src-meter_Light'
 # sn = input('\nEnter last 3 digits of 3458A serial number: ')
-# results_filename = os.path.join(folder, f'HP3458A-{sn}_Rin.json')
+results_filename = os.path.join(folder, f'K6430-Isrc.json')
 # ib_Rin_filename = os.path.join(folder, f'HP3458A-{sn}_Ib_Rin.json')
+
+try:
+    with open(f'{results_filename}', 'r') as Rin_fp:  # Open existing results file so we can add to it.
+        results = json.load(Rin_fp, object_hook=as_ureal)
+except (FileNotFoundError, IOError):
+    results = {}  # Create results dict, if it doesn't exist as a json file yet.
 
 """
 ---------------------------------
@@ -77,8 +130,12 @@ try:
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to dvm!')
 
+    dvm452_I_corrections = {1e-4: GTC.ureal(1.0000024, 2.3e-6, 87),
+                            1e-3: GTC.ureal(0.99999672, 7.7e-7, 29),
+                            1e-2: GTC.ureal(0.99999394, 9.8e-7, 64)
+                            }
+
 addr_K6430 = 20  # input('\nEnter Keithley GPIB address: ')
-# cmd = input('Keithley cmd: ')
 try:
     K6430 = RM.open_resource(f'GPIB1::{addr_K6430}::INSTR')
     K6430.read_termination = '\n'
@@ -90,19 +147,40 @@ except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to Keithley 6430!')
 
 
+# GMH
+port = 4  # input('\nEnter GMH-probe COM-port number: ')
+gmh530 = gmh.GMHSensor(port)
+print(f'gmh530 test-read: {gmh530.measure("T")}')
+
 # Gather info for this test
 high_i_method = None
-i_set = float(input(f'Enter 6430 current source setting: '))
+i_set = float(input(f'\nEnter 6430 current source setting: '))
 if i_set < 100e-6:
     high_i_method = False
 elif i_set > 100e-6:
     high_i_method = True
-else:
+else:  # 100 uA can be done using either method
     response = input('Use high-I method? (y / n)? ')
     if response == 'y':
         high_i_method = True
     else:
         high_i_method = False
 
+"""
+-------------------------------
+Measurement Section starts here:
+-------------------------------
+"""
+while True:  # 1 loop for each I-setting or test
+    if high_i_method:  # 100 uA to 10 mA
+        # Grab a timestamp
+        t = dt.datetime.now()
+        t_str = t.strftime('%d/%m/%Y %H:%M:%S')
+        print(f'Timestamp: {t_str}\n')
+
+        i_readings = measure(i_set)  # 3458a current readings
+
+    else:  # 1 pA to 100 uA
+        pass
 
 # dvm.write('DCV 100; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
