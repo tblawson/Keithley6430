@@ -156,19 +156,6 @@ port = 4  # input('\nEnter GMH-probe COM-port number: ')
 gmh530 = gmh.GMHSensor(port)
 print(f'gmh530 test-read: {gmh530.measure("T")}')
 
-# Gather info for this test
-high_i_method = None
-i_set = float(input(f'\nEnter 6430 current source setting: '))
-if i_set < 100e-6:
-    high_i_method = False
-elif i_set > 100e-6:
-    high_i_method = True
-else:  # 100 uA can be done using either method
-    response = input('Use high-I method? (y / n)? ')
-    if response == 'y':
-        high_i_method = True
-    else:
-        high_i_method = False
 
 """
 -------------------------------
@@ -177,6 +164,20 @@ Measurement Section starts here:
 """
 
 while True:  # 1 loop for each I-setting or test
+    # Gather info for this test
+    high_i_method = None
+    i_set = float(input(f'\nEnter 6430 current source setting: '))
+    if i_set < 100e-6:
+        high_i_method = False
+    elif i_set > 100e-6:
+        high_i_method = True
+    else:  # 100 uA can be done using either method
+        response = input('Use high-I method? (y / n)? ')
+        if response == 'y':
+            high_i_method = True
+        else:
+            high_i_method = False
+
     # Grab a timestamp
     t = dt.datetime.now()
     t_str = t.strftime('%d/%m/%Y %H:%M:%S')
