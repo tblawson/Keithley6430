@@ -58,7 +58,8 @@ def measure(iset):
         dvm.write(f'DCI {i_src}')  # Set DCI mode and range on meter
         time.sleep(0.1)
 
-        K6430.write(f'SOURce:CURRent:RANGe {iset}')  # {iset}
+        K6430.write(f'SOURce:CURRent:RANGe {iset}')  # Timeout error here
+        time.sleep(0.1)
         K6430.write(f'SOURce:CURRent:LEVel {i_src};')
         K6430.write(f'OUTPut ON;')
         time.sleep(1)
