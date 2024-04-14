@@ -58,10 +58,10 @@ def measure(iset):
         dvm.write(f'DCI {i_src}')  # Set DCI mode and range on meter
         time.sleep(0.1)
 
-        K6430.write(f'SOURce:CURRent:RANGe {iset}')  # Timeout error here
+        K6430.write(f'SOUR:CURR:RANG {iset};')  # Timeout error here
         time.sleep(0.1)
-        K6430.write(f'SOURce:CURRent:LEVel {i_src};')
-        K6430.write(f'OUTPut ON;')
+        K6430.write(f'SOUR:CURR:LEV {i_src};')
+        K6430.write(f'OUTP ON;')
         time.sleep(1)
 
         # print(f'Voltage soak delay ({soak_delay} s)...')
@@ -146,8 +146,8 @@ try:
     K6430.timeout = 2000
     rply = K6430.query('*IDN?')
     print(f'Keithley 6430 response (addr{addr_K6430}): {rply}\n')
-    K6430.write('SOURce:FUNCtion CURRent')
-    K6430.write('SOURce:CURRent:MODE FIXed')
+    K6430.write('SOUR:FUNC CURR')  # SOURce:FUNCtion CURRent
+    K6430.write('SOUR:CURR:MODE FIX')  # SOURce:CURRent:MODE FIXed
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to Keithley 6430!')
 
