@@ -58,7 +58,7 @@ def measure(iset):
         dvm.write(f'DCI {i_src}')  # Set DCI mode and range on meter
         time.sleep(0.1)
 
-        K6430.write(f'SOUR:CURR:RANG {iset};')  # Timeout error here
+        K6430.write(f'SOUR:CURR:RANG {iset};')  # Timeout error here.
         time.sleep(0.1)
         K6430.write(f'SOUR:CURR:LEV {i_src};')
         K6430.write(f'OUTP ON;')
@@ -129,7 +129,6 @@ try:
     dvm.timeout = 2000
     rply = dvm.query('ID?')
     print(f'DVM response (addr{addr_dvm}): {rply}\n')
-    dvm.write('DCI 0.01; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to dvm!')
 
@@ -146,7 +145,9 @@ try:
     K6430.timeout = 2000
     rply = K6430.query('*IDN?')
     print(f'Keithley 6430 response (addr{addr_K6430}): {rply}\n')
-    K6430.write('SOUR:FUNC CURR')  # SOURce:FUNCtion CURRent
+    k6430.write('*RST')
+    time.sleep(5)
+    K6430.write('SOUR:FUNC "CURR"')  # SOURce:FUNCtion CURRent
     K6430.write('SOUR:CURR:MODE FIX')  # SOURce:CURRent:MODE FIXed
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to Keithley 6430!')
@@ -182,10 +183,35 @@ while True:  # 1 loop for each I-setting or test
     t = dt.datetime.now()
     t_str = t.strftime('%d/%m/%Y %H:%M:%S')
     print(f'Timestamp: {t_str}\n')
+
+    # set up 3458:
+    if high_i_method:
+        dvm.write('DCI 0.01; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
+    else:  # <= 100 uA
+        R_name = input(f'\nSelect shunt resistor - ENSURE IT IS NOT SHORTED!\n{RESISTORS.keys()}: ')
+        R0 = RESISTORS[R_name]['R0']
+        alpha = RESISTORS[R_name]['alpha']
+        T0 = RESISTORS[R_name]['T0']
+        gamma = RESISTORS[R_name]['gamma']
+        V0 = RESISTORS[R_name]['V0']
+        tau = RESISTORS[R_name]['tau']
+        t0 = RESISTORS[R_name]['t0']
+        t0_dt = dt.datetime.strptime(t0, '%d/%m/%Y %H:%M:%S')
+        T = GTC.ureal(float(gmh530.measure('T')[0]), 0.05, 8, 'T')  # Resistor temp with type-B uncert
+        delta_t = t - t0_dt  # datetime.timedelta object
+        delta_t_days = GTC.ureal(delta_t.days + delta_t.seconds / 86400 + delta_t.microseconds / 8.64e10, 0.1, 8,
+                                 'delta_t_days')
+
+        v_rng = i_set*Rs
+        dvm.write(f'DCI v_rng; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
+
+
+
+
     if high_i_method:  # 100 uA to 10 mA
         print(input(f'Ensure 6430 output is connected to I-meter input. Press ENTER when ready.'))
 
-        i_readings = measure(i_set)  # 3458a current readings
+        i_readings = measure(i_set)  # 3458a current readings dictionary
 
         # ************************** Calculations *****************************
         corrn452 = dvm452_I_corrections[abs(i_set)]  # IS CORRECTION POLARITY-DEPENDENT?
@@ -202,13 +228,17 @@ while True:  # 1 loop for each I-setting or test
         print(input(f'Connect 6430 output to [Rs in parallel to dvm]. Press ENTER when ready.'))
         print('pretending to do something useful')
         v_readings = []
+        # ************************** Calculations *****************************
         src_corrn = 1
-        result = {'I_set': i_set, 'high-I-method': high_i_method, 'data': v_readings, 'correction': src_corrn}
+
+        result = {'I_set': i_set, 'high-I-method': high_i_method, 'timestamp': t_str,
+                  'data': v_readings, 'correction': src_corrn}
 
     results.update(result)
     print('Saving data...')
     with open(f'{results_filename}', 'w') as results_fp:
         json.dump(results, results_fp, indent=4, cls=UrealEncoder)
+
     resp = input('Continue with another test (y/n)? ')
     if resp == 'n':
         break
