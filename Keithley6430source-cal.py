@@ -87,6 +87,7 @@ def measure(iset):
         K6430.write(f'SOURce:CURRent:RANGe {0};LEVel {0};OUTPut OFF')
 
     return i_readings
+# ----------------------------------------------------------------------
 
 
 """
@@ -100,15 +101,14 @@ with open('RESISTORS.json', 'r') as Resistors_fp:
 
 # Data files
 folder = r'G:\My Drive\TechProcDev\Keithley6430-src-meter_Light'
-# sn = input('\nEnter last 3 digits of 3458A serial number: ')
 results_filename = os.path.join(folder, f'K6430-Isrc.json')
-# ib_Rin_filename = os.path.join(folder, f'HP3458A-{sn}_Ib_Rin.json')
-
 try:
+    print(f'\nOpening {results_filename}...')
     with open(f'{results_filename}', 'r') as Rin_fp:  # Open existing results file so we can add to it.
-        results = json.load(Rin_fp, object_hook=as_ureal)
+        results = json.load(Rin_fp, object_hook=as_ureal)  # results dict
 except (FileNotFoundError, IOError):
-    results = {}  # Create results dict, if it doesn't exist as a json file yet.
+    print('\nNo pre-existing results file found. Creating result dict from scratch...')
+    results = {}  # Create empty results dict, if it doesn't exist as a json file yet.
 
 """
 ---------------------------------
@@ -167,6 +167,7 @@ Measurement Section starts here:
 while True:  # 1 loop for each I-setting or test
     # Gather info for this test
     high_i_method = None
+    suffix = ''
     i_set = float(input(f'\nEnter 6430 current source setting: '))
     if i_set < 100e-6:
         high_i_method = False
@@ -185,9 +186,36 @@ while True:  # 1 loop for each I-setting or test
     print(f'Timestamp: {t_str}\n')
 
     # set up 3458:
-    if high_i_method:
+    if high_i_method:  # >= 100 uA
+        suffix = 'HI'
         dvm.write('DCI 0.01; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
+
+        print(input(f'Ensure 6430 output is connected to I-meter input. Press ENTER when ready.'))
+
+        i_readings = measure(i_set)  # 3458a current readings dictionary
+
+        # ************************** Calculations *****************************
+        corrn452 = dvm452_I_corrections[abs(i_set)]  # IS CORRECTION POLARITY-DEPENDENT?
+        I_drift = GTC.ta.estimate(i_readings[0])  # Zero-drift at mid-point
+        Ip = (GTC.ta.estimate(i_readings[1]) - I_drift) * corrn452  # Drift- and gain-corrected
+        In = (GTC.ta.estimate(i_readings[-1]) - I_drift) * corrn452  # Drift- and gain-corrected
+        I_off = (Ip + In) / 2  # Offset in Rs-loaded voltage
+        I_av = (Ip - In) / 2 - I_off
+        src_corrn = I_av / i_set
+
+        # Calculations & write results
+        test_key = f'K6430_{i_set:g}_{suffix}'
+        result = {test_key: {'timestamp': t_str, 'data': i_readings, 'correction': src_corrn}
+                  }
+
     else:  # <= 100 uA
+        suffix = 'LO'
+        dvm.write(f'DCI v_rng; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
+
+        print(input(f'Connect 6430 output to [Rs in parallel to dvm]. Press ENTER when ready.'))
+        print('pretending to do something useful')
+        v_readings = []
+
         R_name = input(f'\nSelect shunt resistor - ENSURE IT IS NOT SHORTED!\n{RESISTORS.keys()}: ')
         R0 = RESISTORS[R_name]['R0']
         alpha = RESISTORS[R_name]['alpha']
@@ -203,31 +231,7 @@ while True:  # 1 loop for each I-setting or test
                                  'delta_t_days')
 
         v_rng = i_set*Rs
-        dvm.write(f'DCI v_rng; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
 
-
-
-
-    if high_i_method:  # 100 uA to 10 mA
-        print(input(f'Ensure 6430 output is connected to I-meter input. Press ENTER when ready.'))
-
-        i_readings = measure(i_set)  # 3458a current readings dictionary
-
-        # ************************** Calculations *****************************
-        corrn452 = dvm452_I_corrections[abs(i_set)]  # IS CORRECTION POLARITY-DEPENDENT?
-        I_drift = GTC.ta.estimate(i_readings[0])  # Zero-drift at mid-point
-        Ip = (GTC.ta.estimate(i_readings[1]) - I_drift)*corrn452  # Drift- and gain-corrected
-        In = (GTC.ta.estimate(i_readings[-1]) - I_drift)*corrn452  # Drift- and gain-corrected
-        I_off = (Ip + In)/2  # Offset in Rs-loaded voltage
-        I_av = (Ip - In)/2 - I_off
-        src_corrn = I_av/i_set
-
-        result = {'I_set': i_set, 'high-I-method': high_i_method, 'timestamp': t_str,
-                  'data': i_readings, 'correction': src_corrn}
-    else:  # 1 pA to 100 uA
-        print(input(f'Connect 6430 output to [Rs in parallel to dvm]. Press ENTER when ready.'))
-        print('pretending to do something useful')
-        v_readings = []
         # ************************** Calculations *****************************
         src_corrn = 1
 
