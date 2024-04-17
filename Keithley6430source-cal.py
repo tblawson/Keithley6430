@@ -48,14 +48,13 @@ def measure(iset):
     """
     az_delay = 5
     i_readings = {-1: [], 0: [], 1: []}  # Dict of empty lists for readings
-    K6430.write('*RST')  # Reset 6430 to default state
     time.sleep(5)
 
     for pol in POLARITY_MASK:
         i_src = iset*pol
         print(f'\ni_src = {i_src} A')
         # Prepare 3458 and 6430 for measurement
-        dvm.write(f'DCI {i_src}')  # Set DCI mode and range on meter
+        dvm.write(f'DCI {i_set}')  # Set DCI mode and range on meter
         time.sleep(0.1)
 
         K6430.write(f'SOUR:CURR:RANG {iset};')  # Timeout error here.
@@ -84,8 +83,9 @@ def measure(iset):
 
         # Set 3458 and 6430 to 'safe mode'
         dvm.write('AZERO ON')
-        K6430.write(f'SOURce:CURRent:RANGe {0};LEVel {0};OUTPut OFF')
-
+        K6430.write('SOURce:CURRent:RANGe 0;LEVel 0')
+        time.sleep(0.1)
+        K6430.write('OUTPut OFF')
     return i_readings
 # ----------------------------------------------------------------------
 
@@ -107,7 +107,7 @@ try:
     with open(f'{results_filename}', 'r') as Rin_fp:  # Open existing results file so we can add to it.
         results = json.load(Rin_fp, object_hook=as_ureal)  # results dict
 except (FileNotFoundError, IOError):
-    print('\nNo pre-existing results file found. Creating result dict from scratch...')
+    print('No pre-existing results file found. Creating result dict from scratch...')
     results = {}  # Create empty results dict, if it doesn't exist as a json file yet.
 
 """
@@ -145,9 +145,9 @@ try:
     K6430.timeout = 2000
     rply = K6430.query('*IDN?')
     print(f'Keithley 6430 response (addr{addr_K6430}): {rply}\n')
-    k6430.write('*RST')
+    K6430.write('*RST')
     time.sleep(5)
-    K6430.write('SOUR:FUNC "CURR"')  # SOURce:FUNCtion CURRent
+    K6430.write('SOUR:FUNC CURR')  # SOURce:FUNCtion CURRent
     K6430.write('SOUR:CURR:MODE FIX')  # SOURce:CURRent:MODE FIXed
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to Keithley 6430!')
