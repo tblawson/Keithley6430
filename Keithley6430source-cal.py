@@ -9,6 +9,7 @@ Two measurement techniques are used:
 """
 
 import os
+import sys
 import GTC
 import pyvisa as visa
 import json
@@ -126,9 +127,10 @@ def measure(test_dict):  # {'Iset': i_set[, 'Rname': R_name, 'Vrng': v_rng]}
 
 
 def get_Rin(rname, v):
-    if v < 0.001:
-        v = 0.001
-    key = f'{rname}_V{v:f}'
+    v_nom = pow(10, round(math.log10(v)))  # Nearest decade value
+    if v_nom < 0.001:
+        v_nom = 0.001
+    key = f'{rname}_V{v_nom:f}'
     return R_IN_452[key]
 # ----------------------------------------------------------------------
 
@@ -158,9 +160,9 @@ except (FileNotFoundError, IOError):
     results = {}  # Create empty results dict, if it doesn't exist as a json file yet.
 
 """
----------------------------------
-Instruments Section
----------------------------------
+------------------------------------------------------------------
+                    Instruments Section
+------------------------------------------------------------------
 """
 # GPIB connection
 RM = visa.ResourceManager()
@@ -177,9 +179,7 @@ try:
     rply = dvm.query('ID?')
     print(f'DVM response (addr{addr_dvm}): {rply}\n')
 except visa.VisaIOError:
-    print('ERROR - Failed to setup visa connection to dvm!')
-
-
+    sys.exit('ERROR - Failed to setup visa connection to dvm!')
 
 addr_K6430 = 20  # input('\nEnter Keithley GPIB address: ')
 try:
@@ -194,7 +194,7 @@ try:
     K6430.write('SOUR:FUNC CURR')  # SOURce:FUNCtion CURRent
     K6430.write('SOUR:CURR:MODE FIX')  # SOURce:CURRent:MODE FIXed
 except visa.VisaIOError:
-    print('ERROR - Failed to setup visa connection to Keithley 6430!')
+    sys.exit('ERROR - Failed to setup visa connection to Keithley 6430!')
 
 # GMH
 port = 4  # input('\nEnter GMH-probe COM-port number: ')
@@ -203,16 +203,16 @@ print(f'gmh530 test-read: {gmh530.measure("T")}')
 
 
 """
--------------------------------
-Measurement Section starts here:
--------------------------------
+----------------------------------------------------------------
+            Measurement Section starts here:
+----------------------------------------------------------------
 """
 
 while True:  # 1 loop for each I-setting or test
     # Gather info for this test
     high_i_method = None
     suffix = ''
-    i_set = float(input(f'\nEnter 6430 current source setting: '))
+    i_set = abs(float(input(f'\nEnter 6430 current source setting: ')))
     if i_set < 100e-6:
         high_i_method = False
     elif i_set > 100e-6:
@@ -225,11 +225,11 @@ while True:  # 1 loop for each I-setting or test
             high_i_method = False
 
     # Grab a timestamp
-    t = dt.datetime.now()
+    t = dt.datetime.now()  # Precision to within ~12 hours is good enough.
     t_str = t.strftime('%d/%m/%Y %H:%M:%S')
     print(f'Timestamp: {t_str}\n')
 
-    # set up 3458:
+    # ---------------------------------------------------------------------------------
     if high_i_method:  # >= 100 uA
         suffix = 'HI'
         dvm.write('DCI 0.01; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
@@ -242,9 +242,9 @@ while True:  # 1 loop for each I-setting or test
         # ************************** Calculations *****************************
         corrn452 = DVM452_I_CORRECTIONS[abs(i_set)]  # IS CORRECTION POLARITY-DEPENDENT?
         I_drift = GTC.ta.estimate(i_readings[0])  # Zero-drift at mid-point
-        Ip = (GTC.ta.estimate(i_readings[1]) - I_drift) * corrn452  # Drift- and gain-corrected
-        In = (GTC.ta.estimate(i_readings[-1]) - I_drift) * corrn452  # Drift- and gain-corrected
-        I_off = (Ip + In) / 2  # Offset in Rs-loaded voltage
+        Ip = (GTC.ta.estimate(i_readings[1]) - I_drift)*corrn452  # Drift- and gain-corrected
+        In = (GTC.ta.estimate(i_readings[-1]) - I_drift)*corrn452  # Drift- and gain-corrected
+        I_off = (Ip + In) / 2  # Offset
         I_av = (Ip - In) / 2 - I_off
         src_corrn = I_av / i_set
 
@@ -252,14 +252,13 @@ while True:  # 1 loop for each I-setting or test
         test_key = f'K6430_{i_set:g}_{suffix}'
         result = {test_key: {'timestamp': t_str, 'data': i_readings, 'correction': src_corrn}
                   }
-
+    # ---------------------------------------------------------------------------------
     else:  # <= 100 uA (low_i_method)
         suffix = 'LO'
 
         dvm.write(f'DCV AUTO; NPLC 20; AZERO ON')  # Set DVM to AUTO-range, initially, for safety
 
-        # R_name = input(f'\nSelect shunt resistor\n{RESISTORS.keys()}: ')
-        R_name = BEST_R_FOR_I[i_set]
+        R_name = BEST_R_FOR_I[i_set]  # R_name = input(f'\nSelect shunt resistor\n{RESISTORS.keys()}: ')
         print(input(f'Connect 6430 output to [{R_name} in parallel with dvm]. Press ENTER when ready.'))
         R0 = RESISTORS[R_name]['R0']
         alpha = RESISTORS[R_name]['alpha']
@@ -273,12 +272,11 @@ while True:  # 1 loop for each I-setting or test
         delta_t = t - t0_dt  # datetime.timedelta object
         delta_t_days = GTC.ureal(delta_t.days + delta_t.seconds / 86400 + delta_t.microseconds / 8.64e10,
                                  0.1, 8, 'delta_t_days')
-        V = i_set*R0  # Approximate V across Rs
-
+        V = abs(i_set*R0)  # Approximate V across Rs
         Rs = R0*(1 + alpha*(T - T0) + gamma*(V - V0) + tau*delta_t_days)  # Rs value now
 
         # Look up Rin for s/n 452
-        Rin = get_Rin(R_name, V)
+        Rin = get_Rin(R_name, V.x)
         R_parallel = Rs * Rin / (Rs + Rin)  # Correct for meter input-Z
         R_nom = pow(10, round(math.log10(R_parallel.x)))  # Nearest decade value
         v_rng = i_set*R_nom  # Use for voltmeter range
@@ -287,18 +285,21 @@ while True:  # 1 loop for each I-setting or test
         v_readings = measure(test_params)  # 3458a voltage readings dictionary
 
         # ************************** Calculations *****************************
-        corrn452 = DVM452_V_CORRECTIONS[abs(V)]
+        corrn452 = DVM452_V_CORRECTIONS[abs(v_rng)]
         V_drift = GTC.ta.estimate(v_readings[0])  # Zero-drift at mid-point
-        Vp = (GTC.ta.estimate(v_readings[1]) - V_drift) * corrn452  # Drift- and gain-corrected
-        In = (GTC.ta.estimate(i_readings[-1]) - I_drift) * corrn452  # Drift- and gain-corrected
+        Vp = (GTC.ta.estimate(v_readings[1]) - V_drift)*corrn452  # Drift- and gain-corrected
+        Vn = (GTC.ta.estimate(i_readings[-1]) - I_drift)*corrn452  # Drift- and gain-corrected
+        V_off = (Vp + Vn) / 2  # Offset in Rs-loaded voltage
+        V_av = (Vp - Vn) / 2 - V_off  # True voltage across true resistance
+        I_av = V_av/R_parallel  # True current
         src_corrn = I_av / i_set
         test_key = f'K6430_{i_set:4g}_{suffix}'
         result = {test_key: {'timestamp': t_str, 'data': v_readings,
-                             'Rs': Rs, 'Rname': R_name,
+                             'Rname': R_name, 'Rs': Rs,
                              'correction': src_corrn
                              }
                   }
-
+    # ---------------------------------------------------------------------------------
     results.update(result)
     print('Saving data...')
     with open(f'{results_filename}', 'w') as results_fp:
