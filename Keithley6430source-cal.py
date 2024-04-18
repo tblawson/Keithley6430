@@ -144,12 +144,14 @@ I/O Section & data storage / retreival
 with open('RESISTORS.json', 'r') as Resistors_fp:
     RESISTORS = json.load(Resistors_fp, object_hook=as_ureal)
 
-# import input-R (s/n 452) info to R_IN_452 dict
-with open('HP3458A-452_Rin.json', 'r') as R_in_452_fp:
-    R_IN_452 = json.load(R_in_452_fp, object_hook=as_ureal)
-
 # Data files
 folder = r'G:\My Drive\TechProcDev\Keithley6430-src-meter_Light'
+r_in_filename = os.path.join(folder, f'HP3458A-452_Rin.json')
+
+# import input-R (s/n 452) info to R_IN_452 dict
+with open(r_in_filename, 'r') as R_in_452_fp:
+    R_IN_452 = json.load(R_in_452_fp, object_hook=as_ureal)
+
 results_filename = os.path.join(folder, f'K6430-Isrc.json')
 try:
     print(f'\nOpening {results_filename}...')
@@ -276,7 +278,7 @@ while True:  # 1 loop for each I-setting or test
         Rs = R0*(1 + alpha*(T - T0) + gamma*(V - V0) + tau*delta_t_days)  # Rs value now
 
         # Look up Rin for s/n 452
-        Rin = get_Rin(R_name, V.x)
+        Rin = get_Rin(R_name, V)
         R_parallel = Rs * Rin / (Rs + Rin)  # Correct for meter input-Z
         R_nom = pow(10, round(math.log10(R_parallel.x)))  # Nearest decade value
         v_rng = i_set*R_nom  # Use for voltmeter range
