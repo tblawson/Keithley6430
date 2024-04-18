@@ -14,11 +14,38 @@ import pyvisa as visa
 import json
 import datetime as dt
 import time
+import math
 import gmhstuff as gmh
 
 N_READINGS = 10
 POLARITY_MASK = [0, 1, -1, 0, -1, 1, 0]
-
+DELAYS = {'C10G': 100,
+          'C1G': 30,
+          'C9620': 10,
+          'C9736': 5,
+          'Al969': 2,
+          'G493': 1
+          }
+BEST_R_FOR_I = {1e-12: 'C10G',  # Based on Table 9 in 'Keithley 6430 Calibration Notes'
+                1e-11: 'C9620',
+                1e-10: 'C1G',
+                1e-9: 'C9620',
+                1e-8: 'C9736',
+                1e-7: 'C9736',  # or 'C9620'
+                1e-6: 'G493',
+                1e-5: 'G493',
+                1e-4: 'G493'
+                }
+DVM452_I_CORRECTIONS = {1e-4: GTC.ureal(1.0000024, 2.3e-6, 87),
+                        1e-3: GTC.ureal(0.99999672, 7.7e-7, 29),
+                        1e-2: GTC.ureal(0.99999394, 9.8e-7, 64)
+                        }
+DVM452_V_CORRECTIONS = {1e-3: GTC.ureal(1.0000917, 1.5e-3, 60),  # Interpolated value. Data from S22139 (2023).
+                        1e-2: GTC.ureal(0.9999985, 9.0e-6, 60),
+                        1e-1: GTC.ureal(0.9999985, 2.0e-6, 60),
+                        1: GTC.ureal(0.999993, 1.2e-6, 60),
+                        10: GTC.ureal(0.9999991, 5.0e-7, 60)
+                        }
 '''
 # ------------------------
 Useful Classes / Functions
@@ -40,31 +67,40 @@ def as_ureal(dct):
         return dct
 
 
-def measure(iset):
+def measure(test_dict):  # {'Iset': i_set[, 'Rname': R_name, 'Vrng': v_rng]}
     """
     Measurement loop function.
-    iset: str (Nominal source voltage setting)
+    test_dict: dict of test parameters
     rtn: Dict of lists for readings
     """
-    az_delay = 5
-    i_readings = {-1: [], 0: [], 1: []}  # Dict of empty lists for readings
+
+    readings = {-1: [], 0: [], 1: []}  # Dict of empty lists for readings
     time.sleep(5)
 
     for pol in POLARITY_MASK:
-        i_src = iset*pol
+        i_set = test_dict['Iset']
+        i_src = i_set*pol
+        Rname = test_dict['Rname']
         print(f'\ni_src = {i_src} A')
+
         # Prepare 3458 and 6430 for measurement
-        dvm.write(f'DCI {i_set}')  # Set DCI mode and range on meter
+        if 'Vrng' in test_dict:  # Low-current method - Measure V_Rs.
+            az_delay = soak_delay = DELAYS[Rname]
+            v_rng = test_dict['Vrng']
+            dvm.write(f'DCV {v_rng}')  # Set DCV mode and range on meter
+        else:  # High-current method - Measure I directly.
+            az_delay = soak_delay = 5
+            dvm.write(f'DCI {i_set}')  # Set DCI mode and range on meter
         time.sleep(0.1)
 
-        K6430.write(f'SOUR:CURR:RANG {iset};')  # Timeout error here.
+        K6430.write(f'SOUR:CURR:RANG {i_set};')
         time.sleep(0.1)
         K6430.write(f'SOUR:CURR:LEV {i_src};')
         K6430.write(f'OUTP ON;')
         time.sleep(1)
 
-        # print(f'Voltage soak delay ({soak_delay} s)...')
-        # time.sleep(soak_delay)
+        print(f'Voltage soak delay ({soak_delay} s)...')
+        time.sleep(soak_delay)
 
         dvm.write(f'LFREQ LINE')
         time.sleep(1)
@@ -74,30 +110,41 @@ def measure(iset):
 
         # Measurement loop - I
         for n in range(N_READINGS):
-            reading = dvm.read()  # dvm.query('READ?')
+            reading = dvm.read()
             if abs(float(reading)) > abs(10*i_src) and pol != 0:
                 print(f'{reading} too high! - skipped')
                 continue
             print(reading)
-            i_readings[pol].append(float(reading))
+            readings[pol].append(float(reading))
 
         # Set 3458 and 6430 to 'safe mode'
         dvm.write('AZERO ON')
         K6430.write('SOURce:CURRent:RANGe 0;LEVel 0')
         time.sleep(0.1)
         K6430.write('OUTPut OFF')
-    return i_readings
+    return readings
+
+
+def get_Rin(rname, v):
+    if v < 0.001:
+        v = 0.001
+    key = f'{rname}_V{v:f}'
+    return R_IN_452[key]
 # ----------------------------------------------------------------------
 
 
 """
 ---------------------------------
-I/O Section & data storage
+I/O Section & data storage / retreival
 ---------------------------------
 """
 # import Resistor info to RESISTORS dict
 with open('RESISTORS.json', 'r') as Resistors_fp:
     RESISTORS = json.load(Resistors_fp, object_hook=as_ureal)
+
+# import input-R (s/n 452) info to R_IN_452 dict
+with open('HP3458A-452_Rin.json', 'r') as R_in_452_fp:
+    R_IN_452 = json.load(R_in_452_fp, object_hook=as_ureal)
 
 # Data files
 folder = r'G:\My Drive\TechProcDev\Keithley6430-src-meter_Light'
@@ -132,10 +179,7 @@ try:
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to dvm!')
 
-dvm452_I_corrections = {1e-4: GTC.ureal(1.0000024, 2.3e-6, 87),
-                        1e-3: GTC.ureal(0.99999672, 7.7e-7, 29),
-                        1e-2: GTC.ureal(0.99999394, 9.8e-7, 64)
-                        }
+
 
 addr_K6430 = 20  # input('\nEnter Keithley GPIB address: ')
 try:
@@ -192,10 +236,11 @@ while True:  # 1 loop for each I-setting or test
 
         print(input(f'Ensure 6430 output is connected to I-meter input. Press ENTER when ready.'))
 
-        i_readings = measure(i_set)  # 3458a current readings dictionary
+        test_params = {'Iset': i_set}
+        i_readings = measure(test_params)  # 3458a current readings dictionary
 
         # ************************** Calculations *****************************
-        corrn452 = dvm452_I_corrections[abs(i_set)]  # IS CORRECTION POLARITY-DEPENDENT?
+        corrn452 = DVM452_I_CORRECTIONS[abs(i_set)]  # IS CORRECTION POLARITY-DEPENDENT?
         I_drift = GTC.ta.estimate(i_readings[0])  # Zero-drift at mid-point
         Ip = (GTC.ta.estimate(i_readings[1]) - I_drift) * corrn452  # Drift- and gain-corrected
         In = (GTC.ta.estimate(i_readings[-1]) - I_drift) * corrn452  # Drift- and gain-corrected
@@ -208,15 +253,14 @@ while True:  # 1 loop for each I-setting or test
         result = {test_key: {'timestamp': t_str, 'data': i_readings, 'correction': src_corrn}
                   }
 
-    else:  # <= 100 uA
+    else:  # <= 100 uA (low_i_method)
         suffix = 'LO'
-        dvm.write(f'DCI v_rng; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
 
-        print(input(f'Connect 6430 output to [Rs in parallel to dvm]. Press ENTER when ready.'))
-        print('pretending to do something useful')
-        v_readings = []
+        dvm.write(f'DCV AUTO; NPLC 20; AZERO ON')  # Set DVM to AUTO-range, initially, for safety
 
-        R_name = input(f'\nSelect shunt resistor - ENSURE IT IS NOT SHORTED!\n{RESISTORS.keys()}: ')
+        # R_name = input(f'\nSelect shunt resistor\n{RESISTORS.keys()}: ')
+        R_name = BEST_R_FOR_I[i_set]
+        print(input(f'Connect 6430 output to [{R_name} in parallel with dvm]. Press ENTER when ready.'))
         R0 = RESISTORS[R_name]['R0']
         alpha = RESISTORS[R_name]['alpha']
         T0 = RESISTORS[R_name]['T0']
@@ -227,16 +271,33 @@ while True:  # 1 loop for each I-setting or test
         t0_dt = dt.datetime.strptime(t0, '%d/%m/%Y %H:%M:%S')
         T = GTC.ureal(float(gmh530.measure('T')[0]), 0.05, 8, 'T')  # Resistor temp with type-B uncert
         delta_t = t - t0_dt  # datetime.timedelta object
-        delta_t_days = GTC.ureal(delta_t.days + delta_t.seconds / 86400 + delta_t.microseconds / 8.64e10, 0.1, 8,
-                                 'delta_t_days')
+        delta_t_days = GTC.ureal(delta_t.days + delta_t.seconds / 86400 + delta_t.microseconds / 8.64e10,
+                                 0.1, 8, 'delta_t_days')
+        V = i_set*R0  # Approximate V across Rs
 
-        v_rng = i_set*Rs
+        Rs = R0*(1 + alpha*(T - T0) + gamma*(V - V0) + tau*delta_t_days)  # Rs value now
+
+        # Look up Rin for s/n 452
+        Rin = get_Rin(R_name, V)
+        R_parallel = Rs * Rin / (Rs + Rin)  # Correct for meter input-Z
+        R_nom = pow(10, round(math.log10(R_parallel.x)))  # Nearest decade value
+        v_rng = i_set*R_nom  # Use for voltmeter range
+
+        test_params = {'Iset': i_set, 'Rname': R_name, 'Vrng': v_rng}
+        v_readings = measure(test_params)  # 3458a voltage readings dictionary
 
         # ************************** Calculations *****************************
-        src_corrn = 1
-
-        result = {'I_set': i_set, 'high-I-method': high_i_method, 'timestamp': t_str,
-                  'data': v_readings, 'correction': src_corrn}
+        corrn452 = DVM452_V_CORRECTIONS[abs(V)]
+        V_drift = GTC.ta.estimate(v_readings[0])  # Zero-drift at mid-point
+        Vp = (GTC.ta.estimate(v_readings[1]) - V_drift) * corrn452  # Drift- and gain-corrected
+        In = (GTC.ta.estimate(i_readings[-1]) - I_drift) * corrn452  # Drift- and gain-corrected
+        src_corrn = I_av / i_set
+        test_key = f'K6430_{i_set:4g}_{suffix}'
+        result = {test_key: {'timestamp': t_str, 'data': v_readings,
+                             'Rs': Rs, 'Rname': R_name,
+                             'correction': src_corrn
+                             }
+                  }
 
     results.update(result)
     print('Saving data...')
