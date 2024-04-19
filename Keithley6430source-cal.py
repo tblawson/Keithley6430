@@ -88,9 +88,12 @@ def measure(test_dict):  # {'Iset': i_set[, 'Rname': R_name, 'Vrng': v_rng]}
         if 'Vrng' in test_dict:  # Low-current method - Measure V_Rs.
             az_delay = soak_delay = DELAYS[Rname]
             v_rng = test_dict['Vrng']
+            over_rng_limit = v_rng
+            print(f'V-range for this test is {v_rng}')
             dvm.write(f'DCV {v_rng}')  # Set DCV mode and range on meter
         else:  # High-current method - Measure I directly.
             az_delay = soak_delay = 5
+            over_rng_limit = i_set
             dvm.write(f'DCI {i_set}')  # Set DCI mode and range on meter
         time.sleep(0.1)
 
@@ -112,7 +115,7 @@ def measure(test_dict):  # {'Iset': i_set[, 'Rname': R_name, 'Vrng': v_rng]}
         # Measurement loop - I
         for n in range(N_READINGS):
             reading = dvm.read()
-            if abs(float(reading)) > abs(10*i_src) and pol != 0:
+            if abs(float(reading)) > abs(10*over_rng_limit) and pol != 0:
                 print(f'{reading} too high! - skipped')
                 continue
             print(reading)
@@ -131,7 +134,7 @@ def get_Rin(rname, v):
     if v_nom < 0.001:
         v_nom = 0.001
     key = f'{rname}_V{v_nom:.1e}'
-    return R_IN_452[key]
+    return R_IN_452[key]['Rin_approx']
 # ----------------------------------------------------------------------
 
 
@@ -290,9 +293,10 @@ while True:  # 1 loop for each I-setting or test
         corrn452 = DVM452_V_CORRECTIONS[abs(v_rng)]
         V_drift = GTC.ta.estimate(v_readings[0])  # Zero-drift at mid-point
         Vp = (GTC.ta.estimate(v_readings[1]) - V_drift)*corrn452  # Drift- and gain-corrected
-        Vn = (GTC.ta.estimate(i_readings[-1]) - I_drift)*corrn452  # Drift- and gain-corrected
+        Vn = (GTC.ta.estimate(v_readings[-1]) - V_drift)*corrn452  # Drift- and gain-corrected
         V_off = (Vp + Vn) / 2  # Offset in Rs-loaded voltage
         V_av = (Vp - Vn) / 2 - V_off  # True voltage across true resistance
+
         I_av = V_av/R_parallel  # True current
         src_corrn = I_av / i_set
         test_key = f'K6430_{i_set:4g}_{suffix}'
