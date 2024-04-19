@@ -130,7 +130,7 @@ def get_Rin(rname, v):
     v_nom = pow(10, round(math.log10(v)))  # Nearest decade value
     if v_nom < 0.001:
         v_nom = 0.001
-    key = f'{rname}_V{v_nom:f}'
+    key = f'{rname}_V{v_nom:.1e}'
     return R_IN_452[key]
 # ----------------------------------------------------------------------
 
