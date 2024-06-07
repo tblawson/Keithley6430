@@ -2,7 +2,7 @@
 """
 Keithley6430source-cal.py
 
-Program to calibrate the I-source ranges of a Keithley 6430 Remoter source-meter.
+Program to calibrate the I-source ranges of a Keithley 6430 Remote source-meter.
 Two measurement techniques are used:
  1. Ranges 10 pA to 100 uA: Measure voltage drop across a sense resistor Rs,
  2. Ranges 100 uA to 10 mA: Measure the current directly with a calibrated I-meter (3458A).
@@ -140,7 +140,7 @@ def get_Rin(rname, v):
 
 """
 ---------------------------------
-I/O Section & data storage / retreival
+I/O Section & data storage / retrieval
 ---------------------------------
 """
 # import Resistor info to RESISTORS dict
@@ -148,7 +148,7 @@ with open('RESISTORS.json', 'r') as Resistors_fp:
     RESISTORS = json.load(Resistors_fp, object_hook=as_ureal)
 
 # Data files
-folder = r'G:\My Drive\TechProcDev\Keithley6430-src-meter_Light'
+folder = r'C:\Users\ETF\OneDrive - Callaghan Innovation\TechProcDev\Keithley6430-src-meter_Light'
 r_in_filename = os.path.join(folder, f'HP3458A-452_Rin.json')
 
 # import input-R (s/n 452) info to R_IN_452 dict
@@ -253,7 +253,7 @@ while True:  # 1 loop for each I-setting or test
         I_av = (Ip - In) / 2 - I_off
         src_corrn = I_av / i_set
 
-        # Calculations & write results
+        # Calculate & write results
         test_key = f'K6430_{i_set:g}_{suffix}'
         result = {test_key: {'timestamp': t_str, 'data': i_readings, 'correction': src_corrn}
                   }
