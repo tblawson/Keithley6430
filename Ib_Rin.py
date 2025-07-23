@@ -80,6 +80,7 @@ with open('RESISTORS.json', 'r') as Resistors_fp:
     RESISTORS = json.load(Resistors_fp, object_hook=as_ureal)
 
 # Data files
+folder = input('Data directory: ')
 folder = r'G:\My Drive\TechProcDev\Keithley6430-src-meter_Light'
 sn = input('\nEnter last 3 digits of 3458A serial number: ')
 ib_Rin_filename = os.path.join(folder, f'HP3458A-{sn}_Ib_Rin.json')
