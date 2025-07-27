@@ -24,16 +24,18 @@ import pyvisa as visa
 import json
 import datetime as dt
 import time
+import winsound as ws
 import gmhstuff as gmh
 
 N_READINGS = 10
 POLARITY_MASK = [0, 1, -1, 0, -1, 1, 0]
-DELAYS = {'C10G': 100,  # 100
-          'C1G': 30,
-          'C9620': 10,
-          'C9736': 5,
-          'Al969': 2,
-          'G493': 1,
+DELAYS = {'C 10G': 100,  # 100
+          'C 1G': 30,
+          'C9620 100M': 10,
+          'G003 100M': 10,
+          'C9736 10M': 5,
+          'Al969 1M': 2,
+          'G493 100k': 1,
           'short': 1
           }
 
@@ -79,7 +81,8 @@ def measure(R_name, vset):
         print(f'Voltage soak delay ({soak_delay} s)...')
         time.sleep(soak_delay)
 
-        dvm.write(f'LFREQ LINE')
+        dvm.write(f'DCV {vset}')  # Set appropriate dvm range
+        dvm.write('LFREQ LINE')
         time.sleep(1)
         dvm.write('AZERO ONCE')
         print(f'AZERO delay ({az_delay} s)...')
@@ -88,7 +91,7 @@ def measure(R_name, vset):
         # Measurement loop - V
         for n in range(N_READINGS):
             reading = dvm.read()  # dvm.query('READ?')
-            if abs(float(reading)) > abs(10*v_src) and pol != 0:
+            if abs(float(reading)) > abs(10*v_src) and pol != 0:  # Catch overloads
                 print(f'{reading} too high! - skipped')
                 continue
             print(reading)
@@ -121,9 +124,6 @@ def dud_ureal(u_lst):
 I/O Section & data storage
 ---------------------------------
 """
-# import Resistor info to RESISTORS dict
-with open('RESISTORS.json', 'r') as Resistors_fp:
-    RESISTORS = json.load(Resistors_fp, object_hook=as_ureal)
 
 # Data files
 folder = input('Data directory: ')
@@ -131,6 +131,11 @@ folder = input('Data directory: ')
 sn = input('\nEnter last 3 digits of 3458A serial number: ')
 results_filename = os.path.join(folder, f'HP3458A-{sn}_Rin.json')
 ib_Rin_filename = os.path.join(folder, f'HP3458A-{sn}_Ib_Rin.json')
+
+# import Resistor info to RESISTORS dict
+resistors_filename = os.path.join(folder, 'RESISTORS.json')
+with open(resistors_filename, 'r') as Resistors_fp:
+    RESISTORS = json.load(Resistors_fp, object_hook=as_ureal)
 
 """
 ---------------------------------
@@ -143,9 +148,9 @@ print('\navailable visa resources:'
       f'\n{RM.list_resources()}')
 
 # dvm initialisation
-addr_dvm = input('\nEnter dvm GPIB address: ')  # 25
+addr_dvm = input('\nEnter dvm GPIB address (just the number): ')  # 25
 try:
-    dvm = RM.open_resource(f'GPIB1::{addr_dvm}::INSTR')
+    dvm = RM.open_resource(f'GPIB0::{addr_dvm}::INSTR')
     dvm.read_termination = '\r\n'
     dvm.write_termination = '\r\n'
     dvm.timeout = 2000
@@ -154,13 +159,13 @@ except visa.VisaIOError:
 
 rply = dvm.query('ID?')
 print(f'DVM at GPIB addr {addr_dvm} response: {rply}')
-dvm.write('DCV 100; NPLC 20; AZERO ON')  # Set DVM to high range, initially, for safety
+dvm.write('DCV 1000; NPLC 20; AZERO ON')  # Set DVM to highest range, initially, for safety
 
 
 # Source initialisation
-addr_src = input('\nEnter source GPIB address: ')
+addr_src = input('\nEnter source GPIB address (just the number): ')
 try:
-    src = RM.open_resource(f'GPIB1::{addr_src}::INSTR')
+    src = RM.open_resource(f'GPIB0::{addr_src}::INSTR')
 except visa.VisaIOError:
     print('ERROR - Failed to setup visa connection to src!')
 
@@ -212,6 +217,7 @@ while True:  # 1 loop for each [Rs, Vset] combination
     V_readings = measure(R_name, Vset)  # Measure V with Rs connected (dict of lists)
     if len(V_readings[1]) < 1:
         continue  # Skip, if no valid readings
+    ws.Beep(1000, 500)  # Keyboard beep for 500 ms
     print(input(f'Bypass Rs, then press ENTER when ready.'))
     Vs_readings = measure('short', Vset)  # Measure Vs with Rs shorted (dict of lists)
     if len(Vs_readings[1]) < 1:
@@ -259,6 +265,7 @@ while True:  # 1 loop for each [Rs, Vset] combination
         print('Saving data...')
         with open(f'{results_filename}', 'w') as Rin_results_fp:
             json.dump(results, Rin_results_fp, indent=4, cls=UrealEncoder)
+    ws.Beep(1000, 500) # Keyboard beep for 500 ms
     resp = input('Continue with another Rs / test-V (y/n)? ')
     if resp == 'n':
         break
