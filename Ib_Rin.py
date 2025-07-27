@@ -94,9 +94,9 @@ Instruments Section
 RM = visa.ResourceManager()
 print('\navailable visa resources:'
       f'\n{RM.list_resources()}')
-addr = input('\nEnter dvm GPIB address: ')
+addr = input('\nEnter dvm GPIB address (just the number): ')
 try:
-    dvm = RM.open_resource(f'GPIB1::{addr}::INSTR')
+    dvm = RM.open_resource(f'GPIB0::{addr}::INSTR')
     dvm.read_termination = '\r\n'
     dvm.write_termination = '\r\n'
     dvm.timeout = 2000
@@ -148,9 +148,9 @@ while True:
 
     # Calculate Ib and collate data
     R = R0*(1 + alpha * (T-T0) + gamma * (V_av - V0) + tau * delta_t_days)
-    print(f'\nTest resistor (corrected) = {R:1.3e}')
+    print(f'\nTest resistor (corrected) = {R.x:12.0f} +/- {R.u:1.2f}, dof = {R.df:3.1f}')
     Ib_approx = V_av / R  # Approx calculation, using a specific shunt resistor
-    print(f'Input bias I = {Ib_approx:1.3e}')
+    print(f'Input bias I = {Ib_approx.x:1.3e} +/- {Ib_approx.u:1.2e}, dof = {Ib_approx.df:3.1f}')
 
     # Compile results dict
     Ib_result = {R_name: {'T': T, 't': t_str, 'R': R,
